@@ -1,0 +1,35 @@
+{
+  "name": "vitalitysync-course-backend",
+  "version": "1.0.0",
+  "description": "VitalitySync backend using Node.js, Express, Sequelize, MySQL, Socket.IO, and AI.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "test": "node --test --test-isolation=none tests/aiService.test.js tests/nutritionService.test.js tests/openFoodFactsService.test.js tests/nutritionEvaluationStore.test.js tests/nutritionEstimateStore.test.js tests/nutritionPhoto.test.js",
+    "migrate:ai-coaches": "node scripts/migrateAiCoachArchitecture.js",
+    "migrate:nutrition": "node scripts/migrateNutritionArchitecture.js",
+    "repair:assignment4": "node scripts/repairAssignment4Schema.js",
+    "repair:schema": "node scripts/repairAssignment4Schema.js",
+    "normalize:demo-metric": "node scripts/normalizeDemoTraineeMetric.js"
+  },
+  "keywords": [
+    "fitness",
+    "express",
+    "mysql",
+    "sequelize",
+    "socket.io",
+    "ai",
+    "rest-api"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^4.18.3",
+    "multer": "^2.2.0",
+    "mysql2": "^3.22.5",
+    "sequelize": "^6.37.8",
+    "socket.io": "^4.8.3"
+  }
+}

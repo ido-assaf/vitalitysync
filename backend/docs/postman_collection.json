@@ -1,0 +1,715 @@
+{
+  "info": {
+    "name": "VitalitySync Full-Stack API",
+    "description": "Mounted Express routes for demonstrating authentication, MySQL CRUD, Sequelize relationships, workout flows, nutrition, AI, and admin monitoring. No provider or database secrets are included.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "adminUserId",
+      "value": "1"
+    },
+    {
+      "key": "traineeUserId",
+      "value": "3"
+    },
+    {
+      "key": "workoutPlanId",
+      "value": "3"
+    },
+    {
+      "key": "newExerciseId",
+      "value": ""
+    },
+    {
+      "key": "productId",
+      "value": "1"
+    },
+    {
+      "key": "productBarcode",
+      "value": "729000000001"
+    },
+    {
+      "key": "nutritionProfileId",
+      "value": "3"
+    },
+    {
+      "key": "aiSpecialistId",
+      "value": "1"
+    },
+    {
+      "key": "evaluationId",
+      "value": ""
+    },
+    {
+      "key": "demoDate",
+      "value": "2026-06-20"
+    }
+  ],
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const contentType = pm.response.headers.get('Content-Type') || '';",
+          "if (contentType.includes('application/json')) {",
+          "  const body = pm.response.json();",
+          "  pm.test('Uses the Assignment response envelope', function () {",
+          "    pm.expect(body).to.have.property('success');",
+          "    pm.expect(body).to.have.property('data');",
+          "    pm.expect(body).to.have.property('error');",
+          "    if (body.success) {",
+          "      pm.expect(body.error).to.eql(null);",
+          "    } else {",
+          "      pm.expect(body.data).to.eql(null);",
+          "      pm.expect(body.error).to.include.keys('code', 'message', 'details');",
+          "    }",
+          "  });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "1 - Health",
+      "item": [
+        {
+          "name": "Backend health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2 - Authentication and current user",
+      "item": [
+        {
+          "name": "Login as admin demo user",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"student.admin\",\n  \"password\": \"123456\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.success && body.data && body.data.userId) {",
+                  "  pm.collectionVariables.set('adminUserId', body.data.userId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register trainee",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Postman\",\n  \"lastName\": \"Trainee\",\n  \"username\": \"postman.{{$randomUUID}}\",\n  \"email\": \"postman.{{$randomUUID}}@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/register"
+          }
+        },
+        {
+          "name": "Get current trainee",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{traineeUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "trainee"
+              }
+            ],
+            "url": "{{baseUrl}}/api/users/me"
+          }
+        },
+        {
+          "name": "Get settings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{traineeUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "trainee"
+              }
+            ],
+            "url": "{{baseUrl}}/api/settings"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/auth/logout"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3 - Exercise CRUD",
+      "item": [
+        {
+          "name": "List exercises",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/exercises"
+          }
+        },
+        {
+          "name": "Create exercise",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{adminUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Cable Row\",\n  \"muscleGroup\": \"Back\",\n  \"mainMuscleGroup\": \"Back\",\n  \"subMuscleGroup\": \"Mid Back\",\n  \"equipment\": \"Cable\",\n  \"difficulty\": \"beginner\",\n  \"level\": \"beginner\",\n  \"movementPattern\": \"horizontal pull\",\n  \"goalTags\": [\"strength\", \"hypertrophy\"],\n  \"instructions\": [\"Sit tall\", \"Pull toward the torso\"],\n  \"source\": \"Postman demo\",\n  \"notes\": \"Temporary CRUD demonstration record.\"\n}"
+            },
+            "url": "{{baseUrl}}/exercises"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.success && body.data && body.data.exerciseId) {",
+                  "  pm.collectionVariables.set('newExerciseId', body.data.exerciseId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get created exercise",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/exercises/{{newExerciseId}}"
+          }
+        },
+        {
+          "name": "Update created exercise",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{adminUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Seated Cable Row\",\n  \"muscleGroup\": \"Back\",\n  \"mainMuscleGroup\": \"Back\",\n  \"subMuscleGroup\": \"Mid Back\",\n  \"equipment\": \"Cable\",\n  \"difficulty\": \"beginner\",\n  \"level\": \"beginner\",\n  \"movementPattern\": \"horizontal pull\",\n  \"goalTags\": [\"strength\", \"hypertrophy\"],\n  \"instructions\": [\"Sit tall\", \"Pull toward the torso\", \"Control the return\"],\n  \"source\": \"Postman demo\",\n  \"notes\": \"Updated CRUD demonstration record.\"\n}"
+            },
+            "url": "{{baseUrl}}/exercises/{{newExerciseId}}"
+          }
+        },
+        {
+          "name": "Delete created exercise",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{adminUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": "{{baseUrl}}/exercises/{{newExerciseId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4 - Workout and ORM relationships",
+      "item": [
+        {
+          "name": "List workout plans with exercise assignments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/workout-plans"
+          }
+        },
+        {
+          "name": "Get one workout plan with junction data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/workout-plans/{{workoutPlanId}}"
+          }
+        },
+        {
+          "name": "Generate or refresh trainee workout plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{traineeUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "trainee"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": {{traineeUserId}}\n}"
+            },
+            "url": "{{baseUrl}}/workout-plans/suggest"
+          }
+        },
+        {
+          "name": "Get active workout session",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{traineeUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "trainee"
+              }
+            ],
+            "url": "{{baseUrl}}/workout-sessions/active?userId={{traineeUserId}}"
+          }
+        },
+        {
+          "name": "Get persisted workout history",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{traineeUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "trainee"
+              }
+            ],
+            "url": "{{baseUrl}}/workout-sessions?userId={{traineeUserId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "5 - Nutrition",
+      "item": [
+        {
+          "name": "Get nutrition profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{traineeUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "trainee"
+              }
+            ],
+            "url": "{{baseUrl}}/nutrition/profile"
+          }
+        },
+        {
+          "name": "Create or update nutrition profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{traineeUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "trainee"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"goal\": \"maintenance\",\n  \"dailyCaloriesTarget\": 2400,\n  \"dailyProteinTarget\": 160,\n  \"dietaryPreferences\": [\"high protein\"],\n  \"allergies\": [],\n  \"medicalRestrictions\": [],\n  \"freeTextNeeds\": \"Support training performance and recovery.\"\n}"
+            },
+            "url": "{{baseUrl}}/nutrition/profile"
+          }
+        },
+        {
+          "name": "Get nutrition target suggestion",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{traineeUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "trainee"
+              }
+            ],
+            "url": "{{baseUrl}}/nutrition/target-suggestion?goal=maintenance"
+          }
+        },
+        {
+          "name": "Search Open Food Facts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{traineeUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "trainee"
+              }
+            ],
+            "url": "{{baseUrl}}/nutrition/foods/search?q=protein%20yogurt&lang=en"
+          }
+        },
+        {
+          "name": "Evaluate food with AI guidance",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{traineeUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "trainee"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"barcode\": \"{{productBarcode}}\",\n  \"servingGrams\": 100,\n  \"date\": \"{{demoDate}}\"\n}"
+            },
+            "url": "{{baseUrl}}/nutrition/evaluate"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.success && body.data && body.data.evaluationId) {",
+                  "  pm.collectionVariables.set('evaluationId', body.data.evaluationId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Estimate homemade meal with AI",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{traineeUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "trainee"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Grilled chicken breast with rice and salad\",\n  \"portionSize\": \"full_plate\",\n  \"customPortion\": \"\",\n  \"cookingStyle\": \"grilled\"\n}"
+            },
+            "url": "{{baseUrl}}/nutrition/estimate-meal"
+          }
+        },
+        {
+          "name": "Add evaluated food to daily log",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{traineeUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "trainee"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"evaluationId\": \"{{evaluationId}}\",\n  \"date\": \"{{demoDate}}\"\n}"
+            },
+            "url": "{{baseUrl}}/nutrition/log-items"
+          }
+        },
+        {
+          "name": "Get daily nutrition log",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{traineeUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "trainee"
+              }
+            ],
+            "url": "{{baseUrl}}/nutrition/today?date={{demoDate}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "6 - AI persisted evaluation",
+      "item": [
+        {
+          "name": "Generate and save product evaluation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": {{traineeUserId}},\n  \"productId\": {{productId}},\n  \"nutritionProfileId\": {{nutritionProfileId}}\n}"
+            },
+            "url": "{{baseUrl}}/ai/product-evaluations/generate"
+          }
+        },
+        {
+          "name": "List persisted product evaluations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/product-evaluations"
+          }
+        }
+      ]
+    },
+    {
+      "name": "7 - Admin monitoring",
+      "item": [
+        {
+          "name": "List AI coaches",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{adminUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/ai-coaches"
+          }
+        },
+        {
+          "name": "List trainees and profile relationships",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{adminUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/trainees"
+          }
+        },
+        {
+          "name": "Assign AI coach to trainee",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{adminUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"aiSpecialistId\": {{aiSpecialistId}}\n}"
+            },
+            "url": "{{baseUrl}}/admin/trainees/{{traineeUserId}}/ai-specialist"
+          }
+        },
+        {
+          "name": "Get active sessions for admin dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{adminUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/live-sessions"
+          }
+        },
+        {
+          "name": "Get completed workout history for admin dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-id",
+                "value": "{{adminUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/workout-history"
+          }
+        }
+      ]
+    },
+    {
+      "name": "8 - Error envelope examples",
+      "item": [
+        {
+          "name": "Invalid exercise returns formatted validation error",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "{{adminUserId}}"
+              },
+              {
+                "key": "x-user-role",
+                "value": "admin"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/exercises"
+          }
+        }
+      ]
+    }
+  ]
+}

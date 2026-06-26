@@ -1,0 +1,59 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+node_modules/
+frontend/build/
+
+# Runtime logs
+*.log
+*.out
+*.err
+logs/
+backend/logs/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local/generated data
+*.db
+*.sqlite
+*.sqlite3
+
+# Large submission artifacts not needed for Render deployment
+*.zip
+*.mp4
+assignment 4/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# IDEs / editors
+.vscode/
+.idea/
+.agents/
+.codex/
+frontend/.chrome-test-profile/
+frontend/.edge-test-profile/
+
+# OS files
+.DS_Store
+Thumbs.db

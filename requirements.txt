@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic
+python-dotenv
+google-generativeai
+google-genai
+streamlit
+requests
+sqlalchemy
+cohere
