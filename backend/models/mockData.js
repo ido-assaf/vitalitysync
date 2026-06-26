@@ -1,63 +1,39 @@
 const users = [
   {
     userId: 1,
-    firstName: "Ido",
-    lastName: "Assaf",
+    firstName: "Student",
+    lastName: "Admin",
+    email: "student@example.com",
+    password: "123456",
+    username: "student.admin",
     createDate: "2026-04-16T09:00:00.000Z",
     updateDate: "2026-04-16T09:00:00.000Z",
     userRole: "admin"
   },
   {
     userId: 2,
-    firstName: "Maya",
-    lastName: "Cohen",
+    firstName: "Demo",
+    lastName: "Trainee",
+    email: "demo.trainee@example.com",
+    password: "password123",
+    username: "demo.trainee",
     createDate: "2026-04-16T09:10:00.000Z",
     updateDate: "2026-04-16T09:10:00.000Z",
-    userRole: "manager"
-  },
-  {
-    userId: 3,
-    firstName: "Daniel",
-    lastName: "Levi",
-    createDate: "2026-04-16T09:20:00.000Z",
-    updateDate: "2026-04-16T09:20:00.000Z",
-    userRole: "user"
+    userRole: "trainee"
   }
 ];
 
 const workoutPlans = [
   {
     planId: 1,
-    userId: 1,
-    goal: "muscle gain",
+    userId: 2,
+    goal: "strength",
     level: "beginner",
-    daysPerWeek: 4,
+    daysPerWeek: 3,
     durationMinutes: 60,
-    notes: "Full body strength plan with extra upper chest focus.",
+    notes: "[ONBOARDING_SUGGESTED_PLAN] AI coach specialty: strength training. Equipment: gym. Limitations: none. Injuries: none. Disliked exercises: none.",
     createDate: "2026-04-16T10:00:00.000Z",
     updateDate: "2026-04-16T10:00:00.000Z"
-  },
-  {
-    planId: 2,
-    userId: 2,
-    goal: "fat loss",
-    level: "intermediate",
-    daysPerWeek: 5,
-    durationMinutes: 45,
-    notes: "Higher weekly frequency with controlled recovery and low-impact conditioning.",
-    createDate: "2026-04-16T10:15:00.000Z",
-    updateDate: "2026-04-16T10:15:00.000Z"
-  },
-  {
-    planId: 3,
-    userId: 3,
-    goal: "strength",
-    level: "advanced",
-    daysPerWeek: 4,
-    durationMinutes: 75,
-    notes: "Upper/lower weekly plan with heavier compounds and longer rest periods.",
-    createDate: "2026-04-16T10:30:00.000Z",
-    updateDate: "2026-04-16T10:30:00.000Z"
   }
 ];
 
@@ -97,7 +73,7 @@ const exercises = [
 const setLogs = [
   {
     setLogId: 1,
-    userId: 1,
+    userId: 2,
     workoutPlanId: 1,
     exerciseId: 1,
     setNumber: 1,
@@ -110,7 +86,7 @@ const setLogs = [
   },
   {
     setLogId: 2,
-    userId: 1,
+    userId: 2,
     workoutPlanId: 1,
     exerciseId: 1,
     setNumber: 2,
@@ -120,94 +96,35 @@ const setLogs = [
     logDate: "2026-04-17T08:05:00.000Z",
     createDate: "2026-04-17T08:05:00.000Z",
     updateDate: "2026-04-17T08:05:00.000Z"
-  },
-  {
-    setLogId: 3,
-    userId: 2,
-    workoutPlanId: 2,
-    exerciseId: 2,
-    setNumber: 1,
-    weight: 35,
-    reps: 12,
-    completed: true,
-    logDate: "2026-04-17T09:00:00.000Z",
-    createDate: "2026-04-17T09:00:00.000Z",
-    updateDate: "2026-04-17T09:00:00.000Z"
   }
 ];
 
 const nutritionProfiles = [
   {
     nutritionProfileId: 1,
-    userId: 1,
-    goal: "fat loss",
-    medicalRestrictions: ["lactose sensitivity"],
-    dietaryPreferences: ["high protein", "low sugar"],
-    freeTextNeeds: "I want to lose weight and avoid dairy",
-    structuredProfile: "Fat loss profile with high protein, low sugar, and lactose avoidance",
-    createDate: "2026-04-18T08:00:00.000Z",
-    updateDate: "2026-04-18T08:00:00.000Z"
-  },
-  {
-    nutritionProfileId: 2,
     userId: 2,
     goal: "muscle gain",
     medicalRestrictions: [],
     dietaryPreferences: ["high protein", "balanced carbs"],
-    freeTextNeeds: "I need enough food to support five training days",
+    freeTextNeeds: "I need enough food to support three strength training days.",
     structuredProfile: "Muscle gain profile with high protein and balanced carbohydrates",
-    createDate: "2026-04-18T08:15:00.000Z",
-    updateDate: "2026-04-18T08:15:00.000Z"
-  },
-  {
-    nutritionProfileId: 3,
-    userId: 3,
-    goal: "blood sugar control",
-    medicalRestrictions: ["diabetes"],
-    dietaryPreferences: ["low sugar", "high fiber"],
-    freeTextNeeds: "I want meals that keep my energy stable",
-    structuredProfile: "Blood sugar control profile with low sugar and high fiber meals",
-    createDate: "2026-04-18T08:30:00.000Z",
-    updateDate: "2026-04-18T08:30:00.000Z"
+    createDate: "2026-04-18T08:00:00.000Z",
+    updateDate: "2026-04-18T08:00:00.000Z"
   }
 ];
 
 const mealPlans = [
   {
     mealPlanId: 1,
-    userId: 1,
-    nutritionProfileId: 1,
-    planType: "daily",
-    dailyCalories: 2200,
-    proteinGrams: 160,
-    meals: ["Breakfast: eggs and oats", "Lunch: chicken rice bowl", "Dinner: tuna salad"],
-    notes: "High protein daily meal plan",
-    createDate: "2026-04-18T09:00:00.000Z",
-    updateDate: "2026-04-18T09:00:00.000Z"
-  },
-  {
-    mealPlanId: 2,
     userId: 2,
-    nutritionProfileId: 2,
+    nutritionProfileId: 1,
     planType: "daily",
     dailyCalories: 2800,
     proteinGrams: 190,
-    meals: ["Breakfast: yogurt oats", "Lunch: turkey pasta", "Dinner: salmon potatoes"],
+    meals: ["Breakfast: eggs and oats", "Lunch: chicken rice bowl", "Dinner: salmon potatoes"],
     notes: "Higher calorie plan for muscle gain",
-    createDate: "2026-04-18T09:15:00.000Z",
-    updateDate: "2026-04-18T09:15:00.000Z"
-  },
-  {
-    mealPlanId: 3,
-    userId: 3,
-    nutritionProfileId: 3,
-    planType: "daily",
-    dailyCalories: 2000,
-    proteinGrams: 140,
-    meals: ["Breakfast: omelet and vegetables", "Lunch: lentil chicken salad", "Dinner: tofu stir fry"],
-    notes: "Low sugar plan with steady meals",
-    createDate: "2026-04-18T09:30:00.000Z",
-    updateDate: "2026-04-18T09:30:00.000Z"
+    createDate: "2026-04-18T09:00:00.000Z",
+    updateDate: "2026-04-18T09:00:00.000Z"
   }
 ];
 
@@ -259,7 +176,7 @@ const foodProducts = [
 const productEvaluations = [
   {
     evaluationId: 1,
-    userId: 1,
+    userId: 2,
     productId: 1,
     nutritionProfileId: 1,
     score: 82,
@@ -268,30 +185,6 @@ const productEvaluations = [
     suggestedAlternatives: ["Low sugar protein yogurt", "Greek yogurt 0%"],
     createDate: "2026-04-18T11:00:00.000Z",
     updateDate: "2026-04-18T11:00:00.000Z"
-  },
-  {
-    evaluationId: 2,
-    userId: 2,
-    productId: 2,
-    nutritionProfileId: 2,
-    score: 75,
-    recommendation: "Mostly suitable",
-    explanation: "Useful protein snack, but calories should fit the daily plan.",
-    suggestedAlternatives: ["Homemade oat bar", "Protein shake with banana"],
-    createDate: "2026-04-18T11:15:00.000Z",
-    updateDate: "2026-04-18T11:15:00.000Z"
-  },
-  {
-    evaluationId: 3,
-    userId: 3,
-    productId: 3,
-    nutritionProfileId: 3,
-    score: 68,
-    recommendation: "Use carefully",
-    explanation: "Sugar is low, but carbs should be portion controlled.",
-    suggestedAlternatives: ["Plain oats", "High fiber cereal"],
-    createDate: "2026-04-18T11:30:00.000Z",
-    updateDate: "2026-04-18T11:30:00.000Z"
   }
 ];
 
@@ -339,14 +232,14 @@ const aiSpecialists = [
 ];
 
 const counters = {
-  userId: 4,
-  planId: 4,
+  userId: 3,
+  planId: 2,
   exerciseId: 4,
-  setLogId: 4,
-  nutritionProfileId: 4,
-  mealPlanId: 4,
+  setLogId: 3,
+  nutritionProfileId: 2,
+  mealPlanId: 2,
   productId: 4,
-  evaluationId: 4,
+  evaluationId: 2,
   specialistId: 5
 };
 

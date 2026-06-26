@@ -94,19 +94,6 @@ const demoUsers = [
     coachBio: null
   },
   {
-    userId: 2,
-    firstName: "Strength",
-    lastName: "Coach",
-    email: "strength.coach@example.com",
-    password: "password123",
-    username: "strength.coach",
-    theme: "system",
-    userRole: "coach",
-    coachId: null,
-    coachSpecialty: "strength training",
-    coachBio: "Strength and conditioning coach focused on safe progressive overload."
-  },
-  {
     userId: 3,
     firstName: "Demo",
     lastName: "Trainee",
@@ -115,7 +102,7 @@ const demoUsers = [
     username: "demo.trainee",
     theme: "system",
     userRole: "trainee",
-    coachId: 2,
+    coachId: null,
     coachSpecialty: null,
     coachBio: null
   }

@@ -11,6 +11,7 @@
     "migrate:nutrition": "node scripts/migrateNutritionArchitecture.js",
     "repair:assignment4": "node scripts/repairAssignment4Schema.js",
     "repair:schema": "node scripts/repairAssignment4Schema.js",
+    "finalize:demo": "node scripts/finalizeDemoSeed.js",
     "normalize:demo-metric": "node scripts/normalizeDemoTraineeMetric.js"
   },
   "keywords": [

@@ -25,29 +25,16 @@ const {
 const { seedCuratedExercises } = require("./curatedExercises");
 
 function withUserDefaults(user) {
-  const email =
-    user.userId === 1
-      ? "student@example.com"
-      : `${user.firstName}.${user.lastName}@example.com`.toLowerCase();
-  const roleById = {
-    1: "admin",
-    2: "coach",
-    3: "trainee"
-  };
-
   return {
     ...user,
-    email,
-    password: user.userId === 1 ? "123456" : "password123",
-    username: `${user.firstName}.${user.lastName}`.toLowerCase(),
-    theme: "system",
-    userRole: roleById[user.userId] || "trainee",
-    coachId: user.userId === 3 ? 2 : null,
-    coachSpecialty: user.userId === 2 ? "strength training" : null,
-    coachBio:
-      user.userId === 2
-        ? "Strength and conditioning coach focused on safe progressive overload."
-        : null
+    email: user.email || `${user.firstName}.${user.lastName}@example.com`.toLowerCase(),
+    password: user.password || "password123",
+    username: user.username || `${user.firstName}.${user.lastName}`.toLowerCase(),
+    theme: user.theme || "system",
+    userRole: user.userRole || "trainee",
+    coachId: null,
+    coachSpecialty: null,
+    coachBio: null
   };
 }
 
@@ -82,7 +69,7 @@ async function ensureDemoTraineeProfile() {
 
   await TraineeProfile.create({
     userId: demoTrainee.userId,
-    coachId: demoTrainee.coachId || null,
+    coachId: null,
     aiSpecialistId: strengthSpecialist?.specialistId || null,
     goal: "strength",
     level: "beginner",
@@ -126,22 +113,6 @@ async function seedDatabase() {
         orderIndex: 1,
         targetSets: 3,
         targetReps: "10-12"
-      },
-      {
-        workoutPlanId: 2,
-        exerciseId: 2,
-        dayLabel: "Day 1",
-        orderIndex: 1,
-        targetSets: 4,
-        targetReps: "12-15"
-      },
-      {
-        workoutPlanId: 3,
-        exerciseId: 3,
-        dayLabel: "Day 1",
-        orderIndex: 1,
-        targetSets: 4,
-        targetReps: "6-8"
       }
     ]);
 
