@@ -71,8 +71,6 @@ backend/
   docs/postman_collection.json
 ```
 
-Older Python, Streamlit, SQLite, and previous-assignment artifacts remain in the repository for now, but they are not part of the active React/Node/MySQL application.
-
 ## Installation
 
 Install backend and frontend dependencies separately with `npm install`, then configure each environment from its `.env.example` file. The detailed commands follow below.
