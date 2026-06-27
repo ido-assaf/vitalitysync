@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const {
   applySafetyRules,
   buildDailyInsight,
+  buildPortionGuidance,
   buildTargetSuggestion,
   calculatePortionNutrition,
   findAllergenMatches,
@@ -233,6 +234,112 @@ test("missing allergen data and calorie excess cannot be downgraded by AI", () =
 
   assert.equal(result.status, "caution");
   assert.equal(result.warnings.length, 2);
+});
+
+test("portion guidance accepts a selected portion that fits calories", () => {
+  const food = {
+    allergens: [],
+    nutritionPer100g: { calories: 120, protein: 12, carbs: 10, fat: 3, sugar: 4 }
+  };
+  const portionNutrition = calculatePortionNutrition(food, 150);
+  const guidance = buildPortionGuidance({
+    food,
+    nutritionProfile: { dailyCaloriesTarget: 2000, dailyProteinTarget: 120, allergies: [] },
+    currentTotals: { calories: 1000, protein: 80 },
+    portionNutrition,
+    projectedTotals: { calories: 1180, protein: 98 },
+    servingGrams: 150
+  });
+
+  assert.equal(guidance.decision, "ok_now");
+  assert.match(guidance.message, /fits your targets/);
+});
+
+test("portion guidance allows a small protein surplus when calories fit", () => {
+  const food = {
+    allergens: [],
+    nutritionPer100g: { calories: 150, protein: 30, carbs: 4, fat: 2, sugar: 1 }
+  };
+  const portionNutrition = calculatePortionNutrition(food, 100);
+  const guidance = buildPortionGuidance({
+    food,
+    nutritionProfile: { dailyCaloriesTarget: 2200, dailyProteinTarget: 120, allergies: [] },
+    currentTotals: { calories: 1600, protein: 112 },
+    portionNutrition,
+    projectedTotals: { calories: 1750, protein: 142 },
+    servingGrams: 100
+  });
+
+  assert.equal(guidance.decision, "ok_now");
+});
+
+test("portion guidance suggests a smaller amount when calories are close", () => {
+  const food = {
+    allergens: [],
+    nutritionPer100g: { calories: 260, protein: 12, carbs: 28, fat: 10, sugar: 5 }
+  };
+  const portionNutrition = calculatePortionNutrition(food, 200);
+  const guidance = buildPortionGuidance({
+    food,
+    nutritionProfile: { goal: "maintenance", dailyCaloriesTarget: 2000, dailyProteinTarget: 120, allergies: [] },
+    currentTotals: { calories: 1750, protein: 90 },
+    portionNutrition,
+    projectedTotals: { calories: 2270, protein: 114 },
+    servingGrams: 200
+  });
+
+  assert.equal(guidance.decision, "reduce_portion");
+  assert.equal(guidance.suggestedServingGrams, 95);
+  assert.equal(guidance.suggestedPortionNutrition.calories, 247);
+});
+
+test("portion guidance does not scale high-calorie low-protein foods absurdly", () => {
+  const food = {
+    allergens: [],
+    nutritionPer100g: { calories: 540, protein: 4, carbs: 60, fat: 30, sugar: 52 }
+  };
+  const portionNutrition = calculatePortionNutrition(food, 200);
+  const guidance = buildPortionGuidance({
+    food,
+    nutritionProfile: { goal: "maintenance", dailyCaloriesTarget: 2400, dailyProteinTarget: 140, allergies: [] },
+    currentTotals: { calories: 1000, protein: 40 },
+    portionNutrition,
+    projectedTotals: { calories: 2080, protein: 48 },
+    servingGrams: 200
+  });
+
+  assert.equal(guidance.decision, "reduce_portion");
+  assert.match(guidance.message, /uses a lot/);
+  assert.equal(guidance.suggestedServingGrams, 60);
+  assert.equal(guidance.suggestedPortionNutrition.calories, 324);
+});
+
+test("portion guidance handles exceeded calories and allergens non-judgmentally", () => {
+  const food = {
+    allergens: ["milk"],
+    nutritionPer100g: { calories: 100, protein: 8, carbs: 10, fat: 2, sugar: 5 }
+  };
+  const portionNutrition = calculatePortionNutrition(food, 100);
+  const allergenGuidance = buildPortionGuidance({
+    food,
+    nutritionProfile: { dailyCaloriesTarget: 2000, dailyProteinTarget: 120, allergies: ["milk"] },
+    currentTotals: { calories: 1000, protein: 60 },
+    portionNutrition,
+    projectedTotals: { calories: 1100, protein: 68 },
+    servingGrams: 100
+  });
+  const exceededGuidance = buildPortionGuidance({
+    food: { ...food, allergens: [] },
+    nutritionProfile: { dailyCaloriesTarget: 2000, dailyProteinTarget: 120, allergies: [] },
+    currentTotals: { calories: 2050, protein: 100 },
+    portionNutrition,
+    projectedTotals: { calories: 2150, protein: 108 },
+    servingGrams: 100
+  });
+
+  assert.equal(allergenGuidance.decision, "better_not_today");
+  assert.equal(exceededGuidance.decision, "better_not_today");
+  assert.match(exceededGuidance.message, /may not fit well today/);
 });
 
 test("daily insight prioritizes empty, exceeded, close, low-protein, and reached states", () => {

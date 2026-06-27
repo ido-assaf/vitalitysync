@@ -5,8 +5,8 @@ import LoadingState from "../components/LoadingState";
 import { login, saveStoredUser } from "../services/api";
 
 const initialForm = {
-  username: "student.admin",
-  password: "123456"
+  username: "",
+  password: ""
 };
 
 function validateLogin(form) {
@@ -70,10 +70,9 @@ function Login() {
       <section className="login-hero" aria-label="VitalitySync login">
         <div>
           <p className="eyebrow">VitalitySync</p>
-          <h1>AI-powered fitness training and smart nutrition recommendation platform</h1>
+          <h1>Train smarter with VitalitySync</h1>
           <p>
-            Track training resources, scan nutrition signals, and review intelligent product
-            insights from one fitness and nutrition dashboard.
+            AI-guided workouts, nutrition checks, and progress insights in one dashboard.
           </p>
         </div>
       </section>

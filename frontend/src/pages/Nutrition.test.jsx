@@ -755,6 +755,13 @@ test("shows live portion preview and clears an evaluation after the portion chan
     status: "recommended",
     explanation: "Fits today.",
     practicalSuggestion: "Enjoy it.",
+    portionGuidance: {
+      decision: "ok_now",
+      label: "Okay to eat now",
+      message: "This portion fits your targets well right now.",
+      suggestedServingGrams: null,
+      suggestedPortionNutrition: null
+    },
     guidanceSource: "groq",
     servingGrams: 150,
     projectedTotals: { calories: 520, protein: 50, carbs: 49, fat: 13 },
@@ -771,6 +778,8 @@ test("shows live portion preview and clears an evaluation after the portion chan
   expect(await screen.findByText("Portion Preview")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Evaluate for this portion" }));
   expect(await screen.findByText("Fits today.")).toBeInTheDocument();
+  expect(await screen.findByText("Okay to eat now")).toBeInTheDocument();
+  expect(screen.getByText("This portion fits your targets well right now.")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "50g" }));
   expect(screen.queryByText("Fits today.")).not.toBeInTheDocument();
 });
@@ -814,6 +823,13 @@ test("adds the exact evaluated snapshot id", async () => {
     status: "neutral",
     explanation: "Fits today.",
     practicalSuggestion: "Keep the portion moderate.",
+    portionGuidance: {
+      decision: "reduce_portion",
+      label: "Consider a smaller portion",
+      message: "This portion would put you over today's calorie target. A smaller amount of the same food may fit better.",
+      suggestedServingGrams: 75,
+      suggestedPortionNutrition: { calories: 60, protein: 7.5, carbs: 4.5, fat: 1.5, sugar: 3 }
+    },
     guidanceSource: "groq",
     servingGrams: 100,
     projectedTotals: { calories: 480, protein: 45, carbs: 46, fat: 12 },
@@ -829,9 +845,77 @@ test("adds the exact evaluated snapshot id", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Search" }));
   fireEvent.click(await screen.findByRole("button", { name: /Protein Yogurt/ }));
   fireEvent.click(await screen.findByRole("button", { name: "Evaluate for this portion" }));
+  expect(await screen.findByText("Consider a smaller portion")).toBeInTheDocument();
+  expect(screen.getByText(/Try about 75g/)).toBeInTheDocument();
   fireEvent.click(await screen.findByRole("button", { name: "Add to Today" }));
 
   await waitFor(() =>
     expect(addNutritionLogItem).toHaveBeenCalledWith({ evaluationId: "evaluation-42" })
   );
+});
+
+test("keeps Add to Today available when portion guidance is advisory", async () => {
+  const profile = {
+    goal: "maintenance",
+    dailyCaloriesTarget: 2000,
+    dailyProteinTarget: 120,
+    allergies: [],
+    dietaryPreferences: [],
+    medicalRestrictions: []
+  };
+  const product = {
+    barcode: "12345678",
+    name: "Protein Yogurt",
+    brand: "Test",
+    imageUrl: null,
+    servingGrams: 100,
+    nutritionComplete: true,
+    nutritionPer100g: { calories: 80, protein: 10, carbs: 6, fat: 2, sugar: 4 },
+    allergens: [],
+    allergensKnown: true,
+    ingredients: "Milk",
+    sourceUrl: "https://example.com"
+  };
+  getNutritionProfile.mockResolvedValue(profile);
+  getNutritionToday.mockResolvedValue({
+    configured: true,
+    profile,
+    remaining: { calories: 0, protein: 20 },
+    totals: { calories: 2000, protein: 100, carbs: 140, fat: 55, sugar: 20 },
+    nutritionCompleteness: { sugarComplete: true },
+    items: [],
+    insight: { type: "attention", text: "You are above today's calorie target.", action: "Choose lighter portions." }
+  });
+  searchNutritionFoods.mockResolvedValue([product]);
+  getNutritionFood.mockResolvedValue(product);
+  evaluateNutritionFood.mockResolvedValue({
+    evaluationId: "evaluation-99",
+    status: "not_recommended",
+    explanation: "This portion may not fit well today.",
+    practicalSuggestion: "Consider choosing this food another time.",
+    portionGuidance: {
+      decision: "better_not_today",
+      label: "May not fit well today",
+      message: "You are already at or above today's calorie target, so this portion may not fit well today.",
+      suggestedServingGrams: null,
+      suggestedPortionNutrition: null
+    },
+    guidanceSource: "deterministic",
+    servingGrams: 100,
+    projectedTotals: { calories: 2080, protein: 110, carbs: 146, fat: 57 },
+    targets: { calories: 2000, protein: 120 },
+    warnings: ["This portion would exceed your daily calorie target."],
+    disclaimer: "General guidance."
+  });
+
+  renderNutrition();
+  fireEvent.change(await screen.findByPlaceholderText("Search food or brand"), {
+    target: { value: "protein yogurt" }
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Search" }));
+  fireEvent.click(await screen.findByRole("button", { name: /Protein Yogurt/ }));
+  fireEvent.click(await screen.findByRole("button", { name: "Evaluate for this portion" }));
+
+  expect(await screen.findByText("May not fit well today")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Add to Today" })).toBeEnabled();
 });

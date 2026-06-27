@@ -1370,8 +1370,20 @@ function Nutrition() {
           {evaluationError ? <div className="nutriscan-inline-state error"><strong>Evaluation unavailable.</strong><span>{evaluationError}</span></div> : null}
           {evaluation ? (
             <>
-              <div className={`nutriscan-result-banner nutrition-status-panel--${evaluation.status}`}><Icon name="shield" size={20} />{evaluation.status === "not_recommended" ? "Safety checks recommend avoiding this product." : evaluation.status === "caution" ? "This choice is usable, with some considerations." : evaluation.status === "recommended" ? "This food fits your current nutrition targets well." : "This food can fit depending on the rest of your day."}</div>
-              <section className="nutriscan-result-copy"><h3>Why this result</h3><p>{evaluation.explanation}</p><h3>Practical suggestion</h3><div className="nutriscan-suggestion"><Icon name="insight" size={20} /><span>{evaluation.practicalSuggestion}</span></div></section>
+              <div className={`nutriscan-result-banner nutrition-status-panel--${evaluation.status}`}><Icon name="shield" size={20} />{evaluation.status === "not_recommended" ? "This portion may not fit well today." : evaluation.status === "caution" ? "This choice is usable, with some considerations." : evaluation.status === "recommended" ? "This food fits your current nutrition targets well." : "This food can fit depending on the rest of your day."}</div>
+              <section className="nutriscan-result-copy">
+                <h3>Why this result</h3><p>{evaluation.explanation}</p>
+                <h3>Practical suggestion</h3><div className="nutriscan-suggestion"><Icon name="insight" size={20} /><span>{evaluation.practicalSuggestion}</span></div>
+                {evaluation.portionGuidance ? (
+                  <>
+                    <h3>Portion guidance</h3>
+                    <div className="nutriscan-suggestion">
+                      <Icon name="remaining" size={20} />
+                      <span><strong>{evaluation.portionGuidance.label}</strong><br />{evaluation.portionGuidance.message}{evaluation.portionGuidance.suggestedServingGrams ? ` Try about ${formatNumber(evaluation.portionGuidance.suggestedServingGrams, 1)}g if you want this food today.` : ""}</span>
+                    </div>
+                  </>
+                ) : null}
+              </section>
               <section><h3>Projected totals after adding ({formatNumber(evaluation.servingGrams, 1)}g)</h3><div className="nutriscan-projected-grid">
                 {[
                   ["Calories", evaluation.projectedTotals.calories, evaluation.targets.calories, "kcal", "calories"],
@@ -1385,7 +1397,7 @@ function Nutrition() {
                 <small>{evaluation.guidanceSource === "groq" ? "AI explanation based on verified values." : evaluation.guidanceSource === "safety_override" ? "Safety rules determined this result without an AI call." : "Deterministic guidance shown because AI was unavailable."}</small>
               </section>
               <div className="nutriscan-disclaimer"><span>i</span>Open Food Facts provides nutrition numbers. AI explains suitability, not medical advice.</div>
-              <div className="nutriscan-result-actions"><button className="button button--primary nutriscan-full-button" type="button" onClick={handleAddFood} disabled={actionStatus === "adding" || evaluation.status === "not_recommended"}><Icon name="add" size={19} />{actionStatus === "adding" ? "Adding..." : "Add to Today"}</button><button className={`nutriscan-bookmark ${favoriteBarcodes.has(String(selectedFood?.barcode)) ? "active" : ""}`} type="button" onClick={() => toggleFavorite(selectedFood)} aria-label={favoriteBarcodes.has(String(selectedFood?.barcode)) ? "Remove product from favorites" : "Add product to favorites"}><Icon name="bookmark" size={20} /></button></div>
+              <div className="nutriscan-result-actions"><button className="button button--primary nutriscan-full-button" type="button" onClick={handleAddFood} disabled={actionStatus === "adding"}><Icon name="add" size={19} />{actionStatus === "adding" ? "Adding..." : "Add to Today"}</button><button className={`nutriscan-bookmark ${favoriteBarcodes.has(String(selectedFood?.barcode)) ? "active" : ""}`} type="button" onClick={() => toggleFavorite(selectedFood)} aria-label={favoriteBarcodes.has(String(selectedFood?.barcode)) ? "Remove product from favorites" : "Add product to favorites"}><Icon name="bookmark" size={20} /></button></div>
             </>
           ) : <WorkspaceEmpty icon="shield" title="Your personalized result will appear here" message="Choose a complete product and evaluate a portion to see suitability, projected totals, and safety guidance." steps={["Real Open Food Facts values", "Personalized target comparison", "Practical AI explanation"]} />}
         </article>

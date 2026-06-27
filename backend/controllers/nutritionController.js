@@ -21,6 +21,7 @@ const {
   addNutrition,
   applySafetyRules,
   buildDailyInsight,
+  buildPortionGuidance,
   buildTargetSuggestion,
   calculatePortionNutrition,
   findAllergenMatches,
@@ -376,6 +377,14 @@ async function evaluateFood({ userId, barcode, servingGrams, date }) {
       calories: Number(profile.dailyCaloriesTarget),
       protein: Number(profile.dailyProteinTarget)
     },
+    portionGuidance: buildPortionGuidance({
+      food,
+      nutritionProfile: profileData,
+      currentTotals,
+      portionNutrition,
+      projectedTotals,
+      servingGrams
+    }),
     ...applySafetyRules({
       aiGuidance,
       food,

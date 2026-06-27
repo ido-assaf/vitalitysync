@@ -207,6 +207,148 @@ function calculatePortionNutrition(product, servingGrams) {
   };
 }
 
+function emptyPortionGuidance(decision, label, message) {
+  return {
+    decision,
+    label,
+    message,
+    suggestedServingGrams: null,
+    suggestedPortionNutrition: null
+  };
+}
+
+function buildPortionGuidance({
+  food,
+  nutritionProfile,
+  currentTotals,
+  portionNutrition,
+  projectedTotals,
+  servingGrams
+}) {
+  const calorieTarget = Number(nutritionProfile?.dailyCaloriesTarget || 0);
+  const proteinTarget = Number(nutritionProfile?.dailyProteinTarget || 0);
+  const selectedGrams = Number(servingGrams);
+  const selectedCalories = Number(portionNutrition?.calories || 0);
+  const selectedProtein = Number(portionNutrition?.protein || 0);
+  const currentCalories = Number(currentTotals?.calories || 0);
+  const currentProtein = Number(currentTotals?.protein || 0);
+  const projectedCalories = Number(projectedTotals?.calories || 0);
+  const projectedProtein = Number(projectedTotals?.protein || 0);
+  const caloriesRemaining = calorieTarget - currentCalories;
+  const proteinRemaining = Math.max(0, proteinTarget - currentProtein);
+  const proteinPer100Calories =
+    selectedCalories > 0 ? (selectedProtein / selectedCalories) * 100 : 0;
+  const proteinFocused = selectedProtein >= 10 || proteinPer100Calories >= 5;
+  const lowProteinForCalories = selectedCalories >= 250 && proteinPer100Calories < 3;
+  const per100Calories = Number(food?.nutritionPer100g?.calories || 0);
+  const highCalorieDensity = per100Calories >= 250;
+  const allergenMatches = findAllergenMatches(
+    nutritionProfile?.allergies,
+    food?.allergens
+  );
+
+  if (allergenMatches.length > 0) {
+    return emptyPortionGuidance(
+      "better_not_today",
+      "May not fit well today",
+      "This product lists an allergen from your profile, so this portion may not fit well for you today."
+    );
+  }
+
+  if (!Number.isFinite(calorieTarget) || calorieTarget <= 0) {
+    return emptyPortionGuidance(
+      "ok_now",
+      "Okay to eat now",
+      "This portion can fit as general guidance, but set a calorie target for more precise feedback."
+    );
+  }
+
+  if (caloriesRemaining <= 0) {
+    return emptyPortionGuidance(
+      "better_not_today",
+      "May not fit well today",
+      "You are already at or above today's calorie target, so this portion may not fit well today."
+    );
+  }
+
+  if (projectedCalories <= calorieTarget) {
+    if (
+      lowProteinForCalories &&
+      proteinRemaining > 20 &&
+      selectedCalories > caloriesRemaining * 0.55
+    ) {
+      const suggestedServingGrams = Math.min(
+        selectedGrams,
+        highCalorieDensity ? 60 : 150
+      );
+      return {
+        decision: "reduce_portion",
+        label: "Consider a smaller portion",
+        message:
+          "This portion fits your calories, but it uses a lot of today's remaining room while protein is still low.",
+        suggestedServingGrams:
+          suggestedServingGrams < selectedGrams ? suggestedServingGrams : null,
+        suggestedPortionNutrition:
+          suggestedServingGrams < selectedGrams
+            ? calculatePortionNutrition(food, suggestedServingGrams)
+            : null
+      };
+    }
+
+    const proteinNote =
+      Number.isFinite(proteinTarget) &&
+      proteinTarget > 0 &&
+      projectedProtein > proteinTarget * 1.6 &&
+      selectedProtein > 70
+        ? " It is also a very high-protein portion, so a smaller amount may feel more practical."
+        : "";
+
+    return emptyPortionGuidance(
+      "ok_now",
+      "Okay to eat now",
+      `This portion fits your targets well right now.${proteinNote}`
+    );
+  }
+
+  const goal = String(nutritionProfile?.goal || "").trim().toLowerCase();
+  const calorieCap =
+    goal === "fat loss"
+      ? proteinFocused ? 375 : 225
+      : goal === "muscle gain"
+        ? proteinFocused ? 500 : 350
+        : proteinFocused ? 450 : 300;
+  const gramCap = proteinFocused ? 250 : highCalorieDensity ? 60 : 150;
+  const suggestedCalories = Math.min(caloriesRemaining, calorieCap);
+  const rawSuggestedGrams =
+    selectedCalories > 0 ? (selectedGrams * suggestedCalories) / selectedCalories : 0;
+  const suggestedServingGrams = Math.min(
+    roundToIncrement(rawSuggestedGrams, 5),
+    gramCap,
+    selectedGrams
+  );
+
+  if (
+    !Number.isFinite(suggestedServingGrams) ||
+    suggestedServingGrams < 15 ||
+    suggestedServingGrams >= selectedGrams * 0.9
+  ) {
+    return emptyPortionGuidance(
+      "better_not_today",
+      "May not fit well today",
+      "This portion would push you past today's calorie target, and a practical smaller amount may not fit well today."
+    );
+  }
+
+  return {
+    decision: "reduce_portion",
+    label: "Consider a smaller portion",
+    message:
+      "This portion would put you over today's calorie target. A smaller amount of the same food may fit better.",
+    suggestedServingGrams,
+    suggestedPortionNutrition: calculatePortionNutrition(food, suggestedServingGrams)
+  };
+}
+
 function sumNutrition(items) {
   return (Array.isArray(items) ? items : []).reduce(
     (totals, item) => ({
@@ -381,6 +523,7 @@ function buildDailyInsight(profile, totals, itemCount = 0) {
 module.exports = {
   addNutrition,
   applySafetyRules,
+  buildPortionGuidance,
   buildTargetSuggestion,
   buildDailyInsight,
   calculatePortionNutrition,

@@ -25,15 +25,27 @@ function submitLoginForm() {
   fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
 }
 
+function fillLoginForm(username, password) {
+  fireEvent.change(screen.getByLabelText("Username"), { target: { value: username } });
+  fireEvent.change(screen.getByLabelText("Password"), { target: { value: password } });
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
+});
+
+test("renders shorter hero copy and empty login fields", () => {
+  renderLogin();
+
+  expect(screen.getByRole("heading", { name: "Train smarter with VitalitySync" })).toBeInTheDocument();
+  expect(screen.getByText("AI-guided workouts, nutrition checks, and progress insights in one dashboard.")).toBeInTheDocument();
+  expect(screen.getByLabelText("Username")).toHaveValue("");
+  expect(screen.getByLabelText("Password")).toHaveValue("");
 });
 
 test("validates required username and password", () => {
   renderLogin();
 
-  fireEvent.change(screen.getByLabelText("Username"), { target: { value: "" } });
-  fireEvent.change(screen.getByLabelText("Password"), { target: { value: "" } });
   submitLoginForm();
 
   expect(screen.getByText("Username is required.")).toBeInTheDocument();
@@ -44,8 +56,7 @@ test("validates required username and password", () => {
 test("validates minimum password length", () => {
   renderLogin();
 
-  fireEvent.change(screen.getByLabelText("Username"), { target: { value: "student.admin" } });
-  fireEvent.change(screen.getByLabelText("Password"), { target: { value: "12345" } });
+  fillLoginForm("student.admin", "12345");
   submitLoginForm();
 
   expect(screen.getByText("Password must contain at least 6 characters.")).toBeInTheDocument();
@@ -56,10 +67,7 @@ test("displays the backend authentication error for wrong credentials", async ()
   login.mockRejectedValueOnce(new Error("Invalid username or password."));
   renderLogin();
 
-  fireEvent.change(screen.getByLabelText("Username"), {
-    target: { value: "unknown.user" }
-  });
-  fireEvent.change(screen.getByLabelText("Password"), { target: { value: "123456" } });
+  fillLoginForm("unknown.user", "123456");
   submitLoginForm();
 
   expect(await screen.findByText("Invalid username or password.")).toBeInTheDocument();
@@ -77,6 +85,7 @@ test("saves the current user and redirects after successful login", async () => 
 
   login.mockResolvedValueOnce(user);
   renderLogin();
+  fillLoginForm("demo.trainee", "password123");
   submitLoginForm();
 
   await waitFor(() => expect(saveStoredUser).toHaveBeenCalledWith(user));
@@ -95,6 +104,7 @@ test("redirects an admin directly to the Admin Dashboard after login", async () 
 
   login.mockResolvedValueOnce(user);
   renderLogin();
+  fillLoginForm("student.admin", "123456");
   submitLoginForm();
 
   await waitFor(() => expect(saveStoredUser).toHaveBeenCalledWith(user));
