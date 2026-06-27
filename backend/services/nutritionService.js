@@ -207,6 +207,260 @@ function calculatePortionNutrition(product, servingGrams) {
   };
 }
 
+const TREAT_FOOD_TERMS = [
+  "chocolate",
+  "candy",
+  "sweet",
+  "sweets",
+  "cookie",
+  "cookies",
+  "biscuit",
+  "brownie",
+  "cake",
+  "donut",
+  "doughnut",
+  "ice cream",
+  "dessert",
+  "confection",
+  "nougat",
+  "wafer",
+  "caramel",
+  "toffee"
+];
+
+function foodText(food) {
+  return `${food?.name || ""} ${food?.brand || ""} ${food?.ingredients || ""}`.toLowerCase();
+}
+
+function isTreatLikeFood(food, per100g) {
+  const text = foodText(food);
+  const matchedTreatTerm = TREAT_FOOD_TERMS.some((term) => text.includes(term));
+  const calories = Number(per100g?.calories || 0);
+  const sugar = Number(per100g?.sugar || 0);
+  const fat = Number(per100g?.fat || 0);
+
+  return matchedTreatTerm || (calories >= 400 && sugar >= 25 && fat >= 20);
+}
+
+function practicalServingCap(food, fallbackGrams) {
+  const listedServing = Number(food?.servingGrams);
+
+  if (Number.isFinite(listedServing) && listedServing >= 10 && listedServing <= 250) {
+    return roundToIncrement(listedServing, 5);
+  }
+
+  return fallbackGrams;
+}
+
+function guidanceWithPortionNutrition(food, guidance, suggestedServingGrams) {
+  const { selectedGrams, ...publicGuidance } = guidance;
+
+  return {
+    ...publicGuidance,
+    suggestedServingGrams,
+    suggestedPortionNutrition:
+      suggestedServingGrams && suggestedServingGrams < Number(guidance.selectedGrams || Infinity)
+        ? calculatePortionNutrition(food, suggestedServingGrams)
+        : null
+  };
+}
+
+function buildFoodQualityAssessment({
+  food,
+  nutritionProfile,
+  currentTotals,
+  portionNutrition,
+  projectedTotals,
+  servingGrams
+}) {
+  const per100g = food?.nutritionPer100g || {};
+  const selectedGrams = Number(servingGrams);
+  const selectedCalories = Number(portionNutrition?.calories || 0);
+  const selectedProtein = Number(portionNutrition?.protein || 0);
+  const selectedFat = Number(portionNutrition?.fat || 0);
+  const selectedSugar =
+    portionNutrition?.sugar === null || portionNutrition?.sugar === undefined
+      ? null
+      : Number(portionNutrition.sugar);
+  const goal = String(nutritionProfile?.goal || "").trim().toLowerCase();
+  const caloriesPer100g = Number(per100g.calories || 0);
+  const sugarPer100g =
+    per100g.sugar === null || per100g.sugar === undefined ? null : Number(per100g.sugar);
+  const fatPer100g = Number(per100g.fat || 0);
+  const calorieTarget = Number(nutritionProfile?.dailyCaloriesTarget || 0);
+  const proteinTarget = Number(nutritionProfile?.dailyProteinTarget || 0);
+  const currentCalories = Number(currentTotals?.calories || 0);
+  const currentProtein = Number(currentTotals?.protein || 0);
+  const projectedCalories = Number(projectedTotals?.calories || 0);
+  const proteinRemaining = Math.max(0, proteinTarget - currentProtein);
+  const proteinPer100Calories =
+    selectedCalories > 0 ? (selectedProtein / selectedCalories) * 100 : 0;
+  const treatLike = isTreatLikeFood(food, per100g);
+  const highCalorieDensity = caloriesPer100g >= 350;
+  const highSugarDensity = sugarPer100g !== null && sugarPer100g >= 20;
+  const highFatDensity = fatPer100g >= 20;
+  const lowProteinForCalories = selectedCalories >= 150 && proteinPer100Calories < 3;
+  const mostlyEmptyDay =
+    calorieTarget > 0 &&
+    proteinTarget > 0 &&
+    currentCalories < calorieTarget * 0.15 &&
+    currentProtein < proteinTarget * 0.15;
+  const treatCalorieThreshold =
+    goal === "fat loss" ? 225 : goal === "muscle gain" ? 300 : 275;
+  const denseSnackCalorieThreshold =
+    goal === "fat loss" ? 225 : goal === "muscle gain" ? 325 : 300;
+  const treatServing = practicalServingCap(food, 30);
+  const denseSnackServing = practicalServingCap(food, highCalorieDensity ? 60 : 150);
+  const treatPortionTooLarge =
+    treatLike &&
+    selectedGrams > treatServing * 1.5 &&
+    (selectedCalories >= treatCalorieThreshold || selectedSugar >= 25 || selectedFat >= 18);
+  const extremeTreatPortion =
+    treatLike &&
+    (selectedGrams >= treatServing * 3 ||
+      selectedCalories >= 700 ||
+      selectedSugar >= 60 ||
+      selectedFat >= 45);
+  const qualityWarnings = [];
+
+  if (extremeTreatPortion) {
+    qualityWarnings.push("This is a very large treat-style portion for one eating occasion.");
+    return {
+      confidence: "clear",
+      shouldSkipAi: true,
+      guidance: {
+        status: "not_recommended",
+        explanation:
+          "This portion is very large for a treat-style food and is high in sugar or fat while adding little protein.",
+        practicalSuggestion:
+          "Log it if you ate it, but a nutritionist-style choice would be a much smaller serving and a protein-rich meal or snack alongside the rest of your day."
+      },
+      warnings: qualityWarnings,
+      portionGuidance: guidanceWithPortionNutrition(
+        food,
+        {
+          decision: "reduce_portion",
+          label: "Use a treat-size portion",
+          message:
+            "This is much larger than a realistic treat portion, even if the calories technically fit today.",
+          selectedGrams
+        },
+        Math.min(treatServing, selectedGrams)
+      )
+    };
+  }
+
+  if (treatPortionTooLarge) {
+    qualityWarnings.push("This treat-style portion is high in sugar or fat for the amount of protein it provides.");
+    return {
+      confidence: "clear",
+      shouldSkipAi: true,
+      guidance: {
+        status: "caution",
+        explanation:
+          "This can fit only as a treat-style choice; the portion is high in sugar or fat compared with its protein contribution.",
+        practicalSuggestion:
+          "Keep it closer to a single serving and anchor the rest of the day around lean protein, fruit or vegetables, and less calorie-dense foods."
+      },
+      warnings: qualityWarnings,
+      portionGuidance: guidanceWithPortionNutrition(
+        food,
+        {
+          decision: "reduce_portion",
+          label: "Use a treat-size portion",
+          message:
+            "This food is better treated as a small snack or dessert than as a main calorie source.",
+          selectedGrams
+        },
+        Math.min(treatServing, selectedGrams)
+      )
+    };
+  }
+
+  if (treatLike && selectedCalories <= 250 && selectedGrams <= treatServing * 1.25) {
+    return {
+      confidence: "clear",
+      shouldSkipAi: true,
+      guidance: {
+        status: "neutral",
+        explanation:
+          "This is a treat-style food, but the selected portion is modest enough to fit as an occasional snack.",
+        practicalSuggestion:
+          mostlyEmptyDay || proteinRemaining > 20
+            ? "Keep it small and make the next choice protein-forward so today does not start mostly from sugar and fat."
+            : "Keep the rest of the day balanced and avoid turning this into a larger portion."
+      },
+      warnings: [],
+      portionGuidance: emptyPortionGuidance(
+        "ok_now",
+        "Small treat portion",
+        "This portion can fit as a small treat, but it should not replace a balanced meal."
+      )
+    };
+  }
+
+  if (
+    highCalorieDensity &&
+    lowProteinForCalories &&
+    (selectedCalories >= denseSnackCalorieThreshold || projectedCalories > calorieTarget * 0.75)
+  ) {
+    qualityWarnings.push("This portion is calorie-dense and low in protein.");
+    return {
+      confidence: "clear",
+      shouldSkipAi: true,
+      guidance: {
+        status: "caution",
+        explanation:
+          "This portion is calorie-dense and low in protein, so it is not a strong fit while protein is still low today.",
+        practicalSuggestion:
+          "Choose a smaller amount or pair a modest portion with a protein-rich food instead of using it as a main meal."
+      },
+      warnings: qualityWarnings,
+      portionGuidance: guidanceWithPortionNutrition(
+        food,
+        {
+          decision: "reduce_portion",
+          label: "Consider a smaller portion",
+          message:
+            "This portion fits calories poorly for its protein return, especially while protein is still low.",
+          selectedGrams
+        },
+        Math.min(denseSnackServing, selectedGrams)
+      )
+    };
+  }
+
+  if (
+    selectedProtein >= 10 &&
+    proteinPer100Calories >= 5 &&
+    selectedCalories <= 450 &&
+    !highSugarDensity &&
+    fatPer100g < 18
+  ) {
+    return {
+      confidence: "clear",
+      shouldSkipAi: true,
+      guidance: {
+        status: "recommended",
+        explanation:
+          "This portion provides meaningful protein for its calories and does not raise obvious sugar or fat concerns.",
+        practicalSuggestion:
+          "Use it as part of a balanced meal or snack and keep tracking the rest of your day."
+      },
+      warnings: [],
+      portionGuidance: null
+    };
+  }
+
+  return {
+    confidence: "ambiguous",
+    shouldSkipAi: false,
+    guidance: null,
+    warnings: [],
+    portionGuidance: null
+  };
+}
+
 function emptyPortionGuidance(decision, label, message) {
   return {
     decision,
@@ -242,6 +496,14 @@ function buildPortionGuidance({
   const lowProteinForCalories = selectedCalories >= 250 && proteinPer100Calories < 3;
   const per100Calories = Number(food?.nutritionPer100g?.calories || 0);
   const highCalorieDensity = per100Calories >= 250;
+  const qualityAssessment = buildFoodQualityAssessment({
+    food,
+    nutritionProfile,
+    currentTotals,
+    portionNutrition,
+    projectedTotals,
+    servingGrams
+  });
   const allergenMatches = findAllergenMatches(
     nutritionProfile?.allergies,
     food?.allergens
@@ -253,6 +515,10 @@ function buildPortionGuidance({
       "May not fit well today",
       "This product lists an allergen from your profile, so this portion may not fit well for you today."
     );
+  }
+
+  if (qualityAssessment.portionGuidance) {
+    return qualityAssessment.portionGuidance;
   }
 
   if (!Number.isFinite(calorieTarget) || calorieTarget <= 0) {
@@ -399,7 +665,8 @@ function applySafetyRules({
   aiGuidance,
   food,
   nutritionProfile,
-  projectedTotals
+  projectedTotals,
+  qualityAssessment
 }) {
   const warnings = [];
   const allergenMatches = findAllergenMatches(
@@ -415,6 +682,15 @@ function applySafetyRules({
   let practicalSuggestion =
     aiGuidance?.practicalSuggestion ||
     "Keep the portion aligned with your remaining calorie and protein targets.";
+
+  if (qualityAssessment?.guidance) {
+    status = atLeastStatus(status, qualityAssessment.guidance.status);
+    if (STATUS_RANK[qualityAssessment.guidance.status] >= STATUS_RANK[aiGuidance?.status || "recommended"]) {
+      explanation = qualityAssessment.guidance.explanation;
+      practicalSuggestion = qualityAssessment.guidance.practicalSuggestion;
+    }
+    warnings.push(...(qualityAssessment.warnings || []));
+  }
 
   if (allergenMatches.length > 0) {
     status = "not_recommended";
@@ -523,6 +799,7 @@ function buildDailyInsight(profile, totals, itemCount = 0) {
 module.exports = {
   addNutrition,
   applySafetyRules,
+  buildFoodQualityAssessment,
   buildPortionGuidance,
   buildTargetSuggestion,
   buildDailyInsight,

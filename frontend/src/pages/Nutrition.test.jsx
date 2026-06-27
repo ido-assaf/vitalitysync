@@ -762,7 +762,7 @@ test("shows live portion preview and clears an evaluation after the portion chan
       suggestedServingGrams: null,
       suggestedPortionNutrition: null
     },
-    guidanceSource: "groq",
+    guidanceSource: "deterministic_quality",
     servingGrams: 150,
     projectedTotals: { calories: 520, protein: 50, carbs: 49, fat: 13 },
     targets: { calories: 2000, protein: 120 },
@@ -780,7 +780,9 @@ test("shows live portion preview and clears an evaluation after the portion chan
   expect(await screen.findByText("Fits today.")).toBeInTheDocument();
   expect(await screen.findByText("Okay to eat now")).toBeInTheDocument();
   expect(screen.getByText("This portion fits your targets well right now.")).toBeInTheDocument();
+  expect(screen.getByText("Nutrition quality rules determined this result without an AI call.")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "50g" }));
+  expect(evaluateNutritionFood).toHaveBeenCalledTimes(1);
   expect(screen.queryByText("Fits today.")).not.toBeInTheDocument();
 });
 

@@ -21,6 +21,7 @@ const {
   addNutrition,
   applySafetyRules,
   buildDailyInsight,
+  buildFoodQualityAssessment,
   buildPortionGuidance,
   buildTargetSuggestion,
   calculatePortionNutrition,
@@ -339,11 +340,24 @@ async function evaluateFood({ userId, barcode, servingGrams, date }) {
   const projectedTotals = addNutrition(currentTotals, portionNutrition);
   const profileData = profile.toJSON();
   const allergenMatches = findAllergenMatches(profileData.allergies, food.allergens);
+  const qualityAssessment = buildFoodQualityAssessment({
+    food,
+    nutritionProfile: profileData,
+    currentTotals,
+    portionNutrition,
+    projectedTotals,
+    servingGrams
+  });
   let aiGuidance = null;
   let aiAvailable = false;
   let guidanceSource = "deterministic";
 
-  if (allergenMatches.length === 0) {
+  if (allergenMatches.length > 0) {
+    guidanceSource = "safety_override";
+  } else if (qualityAssessment.shouldSkipAi && qualityAssessment.guidance) {
+    aiGuidance = qualityAssessment.guidance;
+    guidanceSource = "deterministic_quality";
+  } else {
     try {
       const specialist = await resolveNutritionSpecialist(userId);
       aiGuidance = await generateNutritionGuidance({
@@ -363,8 +377,6 @@ async function evaluateFood({ userId, barcode, servingGrams, date }) {
         projectedTotals
       });
     }
-  } else {
-    guidanceSource = "safety_override";
   }
 
   const evaluation = {
@@ -389,7 +401,8 @@ async function evaluateFood({ userId, barcode, servingGrams, date }) {
       aiGuidance,
       food,
       nutritionProfile: profileData,
-      projectedTotals
+      projectedTotals,
+      qualityAssessment
     }),
     aiAvailable,
     guidanceSource,

@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const {
   applySafetyRules,
   buildDailyInsight,
+  buildFoodQualityAssessment,
   buildPortionGuidance,
   buildTargetSuggestion,
   calculatePortionNutrition,
@@ -236,6 +237,40 @@ test("missing allergen data and calorie excess cannot be downgraded by AI", () =
   assert.equal(result.warnings.length, 2);
 });
 
+test("deterministic quality rules override an overly positive AI result", () => {
+  const qualityAssessment = {
+    guidance: {
+      status: "caution",
+      explanation: "This is a treat-style portion.",
+      practicalSuggestion: "Keep it smaller and add protein later."
+    },
+    warnings: ["This treat-style portion is high in sugar or fat."]
+  };
+  const result = applySafetyRules({
+    aiGuidance: {
+      status: "recommended",
+      explanation: "Looks suitable.",
+      practicalSuggestion: "Enjoy it."
+    },
+    food: {
+      allergens: [],
+      allergensKnown: true
+    },
+    nutritionProfile: {
+      allergies: [],
+      dailyCaloriesTarget: 2400
+    },
+    projectedTotals: {
+      calories: 800
+    },
+    qualityAssessment
+  });
+
+  assert.equal(result.status, "caution");
+  assert.equal(result.explanation, "This is a treat-style portion.");
+  assert.match(result.warnings[0], /treat-style/);
+});
+
 test("portion guidance accepts a selected portion that fits calories", () => {
   const food = {
     allergens: [],
@@ -309,9 +344,93 @@ test("portion guidance does not scale high-calorie low-protein foods absurdly", 
   });
 
   assert.equal(guidance.decision, "reduce_portion");
-  assert.match(guidance.message, /uses a lot/);
-  assert.equal(guidance.suggestedServingGrams, 60);
-  assert.equal(guidance.suggestedPortionNutrition.calories, 324);
+  assert.match(guidance.message, /realistic treat portion/);
+  assert.equal(guidance.suggestedServingGrams, 30);
+  assert.equal(guidance.suggestedPortionNutrition.calories, 162);
+});
+
+test("portion guidance rejects 400g chocolate as first food and suggests one serving", () => {
+  const food = {
+    name: "Chocolate chocolate chocolate, dark chocolate nonpareils",
+    brand: "Chocolate Chocolate Chocolate",
+    ingredients: "Dark chocolate, sugar, cocoa butter, milk fat, vegetable oil, corn starch.",
+    servingGrams: 40,
+    allergens: [],
+    nutritionPer100g: { calories: 500, protein: 0, carbs: 62.5, fat: 27.5, sugar: 50 }
+  };
+  const portionNutrition = calculatePortionNutrition(food, 400);
+  const quality = buildFoodQualityAssessment({
+    food,
+    nutritionProfile: { goal: "muscle gain", dailyCaloriesTarget: 3050, dailyProteinTarget: 155, allergies: [] },
+    currentTotals: { calories: 0, protein: 0 },
+    portionNutrition,
+    projectedTotals: { calories: 2000, protein: 0 },
+    servingGrams: 400
+  });
+  const guidance = buildPortionGuidance({
+    food,
+    nutritionProfile: { goal: "muscle gain", dailyCaloriesTarget: 3050, dailyProteinTarget: 155, allergies: [] },
+    currentTotals: { calories: 0, protein: 0 },
+    portionNutrition,
+    projectedTotals: { calories: 2000, protein: 0 },
+    servingGrams: 400
+  });
+
+  assert.equal(quality.shouldSkipAi, true);
+  assert.equal(quality.guidance.status, "not_recommended");
+  assert.equal(guidance.decision, "reduce_portion");
+  assert.equal(guidance.suggestedServingGrams, 40);
+});
+
+test("small chocolate portions can fit as a treat without an AI call", () => {
+  const food = {
+    name: "Dark chocolate",
+    servingGrams: 30,
+    allergens: [],
+    nutritionPer100g: { calories: 540, protein: 4, carbs: 45, fat: 35, sugar: 38 }
+  };
+  const portionNutrition = calculatePortionNutrition(food, 30);
+  const quality = buildFoodQualityAssessment({
+    food,
+    nutritionProfile: { goal: "maintenance", dailyCaloriesTarget: 2200, dailyProteinTarget: 120, allergies: [] },
+    currentTotals: { calories: 300, protein: 25 },
+    portionNutrition,
+    projectedTotals: { calories: 462, protein: 26.2 },
+    servingGrams: 30
+  });
+  const guidance = buildPortionGuidance({
+    food,
+    nutritionProfile: { goal: "maintenance", dailyCaloriesTarget: 2200, dailyProteinTarget: 120, allergies: [] },
+    currentTotals: { calories: 300, protein: 25 },
+    portionNutrition,
+    projectedTotals: { calories: 462, protein: 26.2 },
+    servingGrams: 30
+  });
+
+  assert.equal(quality.shouldSkipAi, true);
+  assert.equal(quality.guidance.status, "neutral");
+  assert.equal(guidance.decision, "ok_now");
+  assert.match(guidance.message, /small treat/);
+});
+
+test("balanced protein foods are handled deterministically", () => {
+  const food = {
+    name: "Protein Yogurt",
+    allergens: [],
+    nutritionPer100g: { calories: 80, protein: 10, carbs: 6, fat: 2, sugar: 4 }
+  };
+  const portionNutrition = calculatePortionNutrition(food, 150);
+  const quality = buildFoodQualityAssessment({
+    food,
+    nutritionProfile: { goal: "maintenance", dailyCaloriesTarget: 2000, dailyProteinTarget: 120, allergies: [] },
+    currentTotals: { calories: 400, protein: 35 },
+    portionNutrition,
+    projectedTotals: { calories: 520, protein: 50 },
+    servingGrams: 150
+  });
+
+  assert.equal(quality.shouldSkipAi, true);
+  assert.equal(quality.guidance.status, "recommended");
 });
 
 test("portion guidance handles exceeded calories and allergens non-judgmentally", () => {

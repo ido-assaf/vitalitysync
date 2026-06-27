@@ -341,6 +341,23 @@ function StatusBadge({ status }) {
   );
 }
 
+function guidanceSourceText(source) {
+  if (source === "groq") return "AI explanation based on verified values.";
+  if (source === "safety_override") return "Safety rules determined this result without an AI call.";
+  if (source === "deterministic_quality") return "Nutrition quality rules determined this result without an AI call.";
+  return "Deterministic guidance shown because AI was unavailable.";
+}
+
+function savedGuidanceSourceText(item) {
+  if (item.source === "ai_estimate") {
+    return `AI estimate${item.estimateConfidence ? ` · ${item.estimateConfidence} confidence` : ""}`;
+  }
+  if (item.guidanceSource === "groq") return "AI explanation";
+  if (item.guidanceSource === "safety_override") return "Safety override";
+  if (item.guidanceSource === "deterministic_quality") return "Nutrition quality rules";
+  return "Deterministic fallback";
+}
+
 function WorkspaceEmpty({ icon = "package", title, message, steps = [] }) {
   return (
     <div className="nutriscan-empty">
@@ -1394,7 +1411,7 @@ function Nutrition() {
               </div></section>
               <section className="nutriscan-safety"><h3>Allergen &amp; Safety</h3>
                 {evaluation.warnings.length ? evaluation.warnings.map((warning) => <p className={/allergen/i.test(warning) ? "critical" : ""} key={warning}><Icon name="warning" size={16} />{warning}</p>) : <p><Icon name="shield" size={16} />No target or allergen warnings were triggered.</p>}
-                <small>{evaluation.guidanceSource === "groq" ? "AI explanation based on verified values." : evaluation.guidanceSource === "safety_override" ? "Safety rules determined this result without an AI call." : "Deterministic guidance shown because AI was unavailable."}</small>
+                <small>{guidanceSourceText(evaluation.guidanceSource)}</small>
               </section>
               <div className="nutriscan-disclaimer"><span>i</span>Open Food Facts provides nutrition numbers. AI explains suitability, not medical advice.</div>
               <div className="nutriscan-result-actions"><button className="button button--primary nutriscan-full-button" type="button" onClick={handleAddFood} disabled={actionStatus === "adding"}><Icon name="add" size={19} />{actionStatus === "adding" ? "Adding..." : "Add to Today"}</button><button className={`nutriscan-bookmark ${favoriteBarcodes.has(String(selectedFood?.barcode)) ? "active" : ""}`} type="button" onClick={() => toggleFavorite(selectedFood)} aria-label={favoriteBarcodes.has(String(selectedFood?.barcode)) ? "Remove product from favorites" : "Add product to favorites"}><Icon name="bookmark" size={20} /></button></div>
@@ -1417,7 +1434,7 @@ function Nutrition() {
                     <span>{item.brand || "Open Food Facts"}</span><span>{item.portionDescription || (item.servingGrams ? `${formatNumber(item.servingGrams, 1)}g` : "Estimated portion")}</span><span>{item.source === "ai_estimate" ? "~" : ""}{formatNumber(item.calories)} kcal</span><span>{item.source === "ai_estimate" ? "~" : ""}{formatNumber(item.protein, 1)}g</span><StatusBadge status={item.evaluationStatus} /><span>{item.createDate ? new Date(item.createDate).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Today"}</span>
                     <div className="nutriscan-log-actions"><button type="button" onClick={() => toggleItem(item.nutritionLogItemId)}>{expandedItems.has(item.nutritionLogItemId) ? "Hide" : item.source === "ai_estimate" ? "Why estimated?" : item.evaluationStatus === "recommended" ? "Why recommended?" : "Reason"}</button><button className="delete" type="button" aria-label={`Delete ${item.foodName}`} onClick={() => handleDelete(item)} disabled={actionStatus === `deleting-${item.nutritionLogItemId}`}><Icon name="trash" size={16} /></button></div>
                   </div>
-                  {expandedItems.has(item.nutritionLogItemId) ? <div className="nutriscan-log-details"><p><strong>{item.source === "ai_estimate" ? "Why estimated:" : "Saved reason:"}</strong> {item.evaluationReason}</p>{item.estimateAssumptions?.length ? <p><strong>Assumptions:</strong> {item.estimateAssumptions.join(", ")}</p> : null}<p><strong>{item.source === "ai_estimate" ? "Uncertainty:" : "Suggestion:"}</strong> {item.practicalSuggestion}</p><small>Guidance: {item.source === "ai_estimate" ? `AI estimate${item.estimateConfidence ? ` · ${item.estimateConfidence} confidence` : ""}` : item.guidanceSource === "groq" ? "AI explanation" : item.guidanceSource === "safety_override" ? "Safety override" : "Deterministic fallback"}</small></div> : null}
+                  {expandedItems.has(item.nutritionLogItemId) ? <div className="nutriscan-log-details"><p><strong>{item.source === "ai_estimate" ? "Why estimated:" : "Saved reason:"}</strong> {item.evaluationReason}</p>{item.estimateAssumptions?.length ? <p><strong>Assumptions:</strong> {item.estimateAssumptions.join(", ")}</p> : null}<p><strong>{item.source === "ai_estimate" ? "Uncertainty:" : "Suggestion:"}</strong> {item.practicalSuggestion}</p><small>Guidance: {savedGuidanceSourceText(item)}</small></div> : null}
                 </div>
               ))}
               <div className="nutriscan-log-total"><strong>Daily total</strong><span>{formatNumber(totals.calories)} kcal</span><span>{formatNumber(totals.protein, 1)}g protein</span><button type="button" onClick={toggleAllDetails}>{expandedItems.size === today.items.length ? "Hide details" : "View full log"} <Icon name="arrow" size={14} /></button></div>
