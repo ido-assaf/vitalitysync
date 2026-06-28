@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Badge from "../components/Badge";
 import EmptyState from "../components/EmptyState";
 import ErrorState from "../components/ErrorState";
@@ -28,6 +28,12 @@ const emptyForm = {
   rules: "",
   isActive: true
 };
+
+const coachResponseOptions = [
+  "Reduce weight by 10% and continue carefully.",
+  "Skip this exercise today and move to the next one.",
+  "Lower the reps and stop if pain continues."
+];
 
 function asList(value, fallback = "None") {
   return Array.isArray(value) && value.length > 0 ? value.join(", ") : fallback;
@@ -85,6 +91,13 @@ function eventDetails(type, payload, trainees) {
     };
   }
 
+  if (type === "workout:coachResponse") {
+    return {
+      label: "Coach response",
+      detail: `${name}: ${payload.message || "Coach response sent."}`
+    };
+  }
+
   if (type === "workout:finished") {
     return {
       label: "Workout finished",
@@ -104,7 +117,8 @@ const eventTypeOptions = [
   ["setLog:created", "Set logged"],
   ["workout:progressUpdated", "Progress updated"],
   ["workout:finished", "Workout finished"],
-  ["workout:issueReported", "Issue reported"]
+  ["workout:issueReported", "Issue reported"],
+  ["workout:coachResponse", "Coach response"]
 ];
 
 const eventChipOptions = [
@@ -113,7 +127,8 @@ const eventChipOptions = [
   ["setLog:created", "Set Logged"],
   ["workout:progressUpdated", "Progress"],
   ["workout:finished", "Finished"],
-  ["workout:issueReported", "Issues"]
+  ["workout:issueReported", "Issues"],
+  ["workout:coachResponse", "Responses"]
 ];
 
 function initials(value) {
@@ -176,6 +191,7 @@ function sessionSearchText(session) {
 function eventTone(type) {
   if (type === "setLog:created") return "blue";
   if (type === "workout:issueReported") return "orange";
+  if (type === "workout:coachResponse") return "blue";
   if (type === "workout:finished") return "dark";
   return "green";
 }
@@ -224,6 +240,7 @@ function AdminDashboard() {
   const [liveSessions, setLiveSessions] = useState([]);
   const [workoutHistory, setWorkoutHistory] = useState([]);
   const [events, setEvents] = useState([]);
+  const [responseDrafts, setResponseDrafts] = useState({});
   const [selectedCoachId, setSelectedCoachId] = useState(null);
   const [monitorTraineeId, setMonitorTraineeId] = useState("");
   const [monitorActivity, setMonitorActivity] = useState("");
@@ -245,6 +262,7 @@ function AdminDashboard() {
   const [messageType, setMessageType] = useState("success");
   const [activeTab, setActiveTab] = useState("live");
   const [socketStatus, setSocketStatus] = useState("connecting");
+  const socketRef = useRef(null);
 
   async function loadDashboard({ preserveMessage = false } = {}) {
     setStatus("loading");
@@ -324,6 +342,7 @@ function AdminDashboard() {
     }
 
     const socket = createWorkoutSocket("admin");
+    socketRef.current = socket;
     socket.on("connect", async () => {
       setSocketStatus("connected");
       try {
@@ -425,6 +444,9 @@ function AdminDashboard() {
     socket.on("workout:issueReported", (issue) =>
       addEvent("workout:issueReported", issue)
     );
+    socket.on("workout:coachResponse", (response) =>
+      addEvent("workout:coachResponse", response)
+    );
     socket.on("workout:finished", (session) => {
       upsertSession(session);
       setWorkoutHistory((current) => [
@@ -450,7 +472,12 @@ function AdminDashboard() {
       addEvent("workout:finished", session);
     });
 
-    return () => socket.disconnect();
+    return () => {
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
+      socket.disconnect();
+    };
   }, [user?.userRole]);
 
   const selectedCoach = aiCoaches.find(
@@ -497,6 +524,64 @@ function AdminDashboard() {
   });
   const visibleEvents = showAllEvents ? filteredEvents : filteredEvents.slice(0, 6);
   const visibleHistory = showAllHistory ? filteredHistory : filteredHistory.slice(0, 8);
+  function updateResponseDraft(eventId, changes) {
+    setResponseDrafts((current) => ({
+      ...current,
+      [eventId]: {
+        ...(current[eventId] || {}),
+        ...changes
+      }
+    }));
+  }
+
+  function handleCoachResponse(event) {
+    const issue = event.payload || {};
+    const draft = responseDrafts[event.id] || {};
+    const cannedMessage = draft.canned || coachResponseOptions[0];
+    const customMessage = String(draft.custom || "").trim();
+    const messageText = customMessage || cannedMessage;
+
+    if (!socketRef.current || socketStatus !== "connected") {
+      setMessage("Live socket is not connected yet. Try again in a moment.");
+      setMessageType("error");
+      return;
+    }
+
+    if (!issue.workoutSessionId || !issue.userId || !messageText) {
+      setMessage("This issue is missing session details for a coach response.");
+      setMessageType("error");
+      return;
+    }
+
+    socketRef.current.emit("workout:coachResponse", {
+      issueId: issue.issueId,
+      workoutSessionId: issue.workoutSessionId,
+      userId: issue.userId,
+      responseType: customMessage ? "custom" : "preset",
+      message: messageText
+    });
+
+    setEvents((current) =>
+      current.map((item) =>
+        item.id === event.id
+          ? {
+              ...item,
+              payload: {
+                ...item.payload,
+                coachResponseSent: true,
+                coachResponseMessage: messageText
+              }
+            }
+          : item
+      )
+    );
+    setResponseDrafts((current) => {
+      const next = { ...current };
+      delete next[event.id];
+      return next;
+    });
+  }
+
   const issueCount = filteredHistory.reduce(
     (total, session) =>
       total +
@@ -1025,6 +1110,9 @@ function AdminDashboard() {
                       {visibleEvents.map((event) => {
                         const display = eventDetails(event.type, event.payload, trainees);
                         const tone = eventTone(event.type);
+                        const isIssue = event.type === "workout:issueReported" && !event.payload?.error;
+                        const responseDraft = responseDrafts[event.id] || {};
+                        const responseSent = Boolean(event.payload?.coachResponseSent);
                         return (
                           <article className="admin-event-row" key={event.id}>
                             <span className={`admin-event-glyph admin-event-glyph--${tone}`} aria-hidden="true">
@@ -1035,6 +1123,47 @@ function AdminDashboard() {
                             </span>
                             <p>{display.detail}</p>
                             <time>{new Date(event.receivedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
+                            {isIssue ? (
+                              <div className="admin-issue-response">
+                                {responseSent ? (
+                                  <span>
+                                    Response sent: {event.payload.coachResponseMessage}
+                                  </span>
+                                ) : (
+                                  <>
+                                    <select
+                                      value={responseDraft.canned || coachResponseOptions[0]}
+                                      onChange={(changeEvent) =>
+                                        updateResponseDraft(event.id, { canned: changeEvent.target.value })
+                                      }
+                                    >
+                                      {coachResponseOptions.map((option) => (
+                                        <option key={option} value={option}>
+                                          {option}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <input
+                                      type="text"
+                                      maxLength="180"
+                                      value={responseDraft.custom || ""}
+                                      onChange={(changeEvent) =>
+                                        updateResponseDraft(event.id, { custom: changeEvent.target.value })
+                                      }
+                                      placeholder="Optional custom response"
+                                    />
+                                    <button
+                                      type="button"
+                                      className="button button--ghost button--outline"
+                                      disabled={socketStatus !== "connected"}
+                                      onClick={() => handleCoachResponse(event)}
+                                    >
+                                      Send response
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            ) : null}
                           </article>
                         );
                       })}

@@ -186,6 +186,7 @@ function Training() {
   const [error, setError] = useState("");
   const [activeWorkout, setActiveWorkout] = useState(null);
   const [finishedWorkouts, setFinishedWorkouts] = useState([]);
+  const [coachResponses, setCoachResponses] = useState([]);
   const [selectedDayLabel, setSelectedDayLabel] = useState("");
   const [previewExerciseId, setPreviewExerciseId] = useState("");
   const [liveMessage, setLiveMessage] = useState("");
@@ -351,6 +352,16 @@ function Training() {
       setLiveMessage(
         issue.error ? issue.message : "Issue reported to coach dashboard in real time."
       );
+    });
+
+    socket.on("workout:coachResponse", (response) => {
+      if (response?.error) {
+        setLiveMessage(response.message || "Coach response could not be delivered.");
+        return;
+      }
+
+      setCoachResponses((current) => [response, ...current].slice(0, 3));
+      setLiveMessage(`Coach response: ${response.message}`);
     });
 
     socket.on("workout:finished", (session) => {
@@ -1060,6 +1071,16 @@ function Training() {
         <div className="message message--error">
           Workout history could not be loaded, but training remains available.
         </div>
+      ) : null}
+      {coachResponses.length > 0 ? (
+        <section className="coach-response-panel" aria-label="Live coach responses">
+          <strong>Coach response</strong>
+          {coachResponses.map((response) => (
+            <p key={`${response.workoutSessionId}-${response.sentAt}`}>
+              {response.message}
+            </p>
+          ))}
+        </section>
       ) : null}
       {liveMessage ? <div className="message message--success">{liveMessage}</div> : null}
     </div>

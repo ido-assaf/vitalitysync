@@ -10,6 +10,11 @@ const {
 } = require("../models");
 
 const ADMIN_ROOM = "admin-monitoring";
+const TRAINEE_ROOM_PREFIX = "trainee-workout";
+
+function traineeRoom(userId) {
+  return `${TRAINEE_ROOM_PREFIX}:${userId}`;
+}
 
 function plain(record) {
   return record && typeof record.toJSON === "function" ? record.toJSON() : record;
@@ -104,6 +109,10 @@ function validNonNegativeNumber(value) {
   return Number.isFinite(number) && number >= 0 ? number : null;
 }
 
+function shortText(value, maxLength = 180) {
+  return String(value || "").trim().slice(0, maxLength);
+}
+
 function emitError(socket, message, details = {}) {
   socket.emit("workout:issueReported", {
     error: true,
@@ -123,9 +132,14 @@ function setupSocket(server, allowedOrigins) {
 
   io.on("connection", (socket) => {
     const role = socket.handshake.query.role;
+    const socketUserId = validPositiveInteger(socket.handshake.query.userId);
 
     if (role === "admin") {
       socket.join(ADMIN_ROOM);
+    }
+
+    if (socketUserId) {
+      socket.join(traineeRoom(socketUserId));
     }
 
     socket.on("workout:started", async (payload = {}) => {
@@ -312,6 +326,46 @@ function setupSocket(server, allowedOrigins) {
         }
       } catch (error) {
         emitError(socket, "Could not report workout issue.", { reason: error.message });
+      }
+    });
+
+    socket.on("workout:coachResponse", async (payload = {}) => {
+      try {
+        if (role !== "admin") {
+          emitError(socket, "Only admins can send coach responses.");
+          return;
+        }
+
+        const workoutSessionId = validPositiveInteger(payload.workoutSessionId);
+        const message = shortText(payload.message);
+
+        if (!workoutSessionId || !message) {
+          emitError(socket, "Choose an issue and enter a coach response.");
+          return;
+        }
+
+        const session = await WorkoutSession.findByPk(workoutSessionId);
+        if (!session) {
+          emitError(socket, "Workout session was not found.");
+          return;
+        }
+
+        const userId = validPositiveInteger(payload.userId) || session.userId;
+        const responsePayload = {
+          issueId: validPositiveInteger(payload.issueId),
+          workoutSessionId,
+          userId,
+          workoutPlanId: session.workoutPlanId,
+          responseType: shortText(payload.responseType, 40) || "custom",
+          message,
+          senderRole: "admin",
+          sentAt: new Date().toISOString()
+        };
+
+        io.to(traineeRoom(userId)).emit("workout:coachResponse", responsePayload);
+        await emitToAdmin(io, "workout:coachResponse", responsePayload);
+      } catch (error) {
+        emitError(socket, "Could not send coach response.", { reason: error.message });
       }
     });
 

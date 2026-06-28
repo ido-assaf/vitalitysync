@@ -314,9 +314,10 @@ Socket.IO provides live workout logging and admin monitoring. The custom events 
 - `setLog:created`
 - `workout:progressUpdated`
 - `workout:issueReported`
+- `workout:coachResponse`
 - `workout:finished`
 
-Workout sessions, set logs, and reported issues are saved through Sequelize. The admin dashboard receives events in real time and can display active sessions and progress.
+Workout sessions, set logs, and reported issues are saved through Sequelize. The admin dashboard receives events in real time, can display active sessions and progress, and can send short live coach responses back to the trainee.
 
 ### Two-client demonstration
 
@@ -326,9 +327,10 @@ Normal tabs share localStorage, so use separate browser profiles or one normal a
 2. Log in as an admin in the first client and open `/admin`.
 3. Log in as a trainee in the second client and open `/training`.
 4. Start a workout.
-5. Save a set, report an issue, and finish the workout.
-6. Confirm each event appears without refreshing the admin client.
-7. Refresh or query workout history to confirm the records were persisted.
+5. Save a set, report an issue, and send a coach response from the admin client.
+6. Confirm the trainee receives the coach response without refreshing.
+7. Finish the workout and confirm events appear without refreshing the admin client.
+8. Refresh or query workout history to confirm the records were persisted.
 
 ## AI features
 

@@ -51,8 +51,7 @@ Use this file as a local tracker only. Do not commit real passwords, API keys, o
 - [ ] At least one DB-backed resource supports create, update, and delete.
 - [ ] Backend connects to AWS RDS and persisted data survives restart.
 - [ ] AWS RDS connects from MySQL Workbench 8.0 CE.
-- [ ] Socket.IO live workout events work between admin and trainee clients.
+- [ ] Socket.IO live workout events and coach responses work between admin and trainee clients.
 - [ ] AI nutrition feature works through the deployed backend.
 - [ ] Browser devtools show no localhost API or socket calls in production.
 - [ ] GitHub/submission package does not contain real `.env` files or secrets.
-
