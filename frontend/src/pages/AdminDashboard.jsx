@@ -716,6 +716,11 @@ function AdminDashboard() {
     ? detailTrainee.WorkoutPlans
     : [];
   const latestPlan = plans.slice().sort((left, right) => right.planId - left.planId)[0];
+  const latestPlanAssignments = planAssignments(latestPlan);
+  const activeDayLabel = traineeDetails?.activeSession?.selectedDayLabel;
+  const activeDayAssignments = activeDayLabel
+    ? latestPlanAssignments.filter((assignment) => assignment.dayLabel === activeDayLabel)
+    : [];
 
   return (
     <div className={`stack ${activeTab === "live" ? "admin-monitoring-page" : ""}`}>
@@ -1401,13 +1406,30 @@ function AdminDashboard() {
               <h3>Latest Workout Plan</h3>
             </div>
             {latestPlan ? (
-              <div className="plan-preview-list">
+              <>
+              <div className="plan-preview-list plan-preview-list--summary">
+                <span>Goal: {latestPlan.goal || detailProfile?.goal || "Not set"}</span>
+                <span>{latestPlan.daysPerWeek || detailProfile?.trainingDaysPerWeek || "-"} days/week</span>
+                <span>{latestPlanAssignments.length} planned exercises</span>
+                {activeDayAssignments.length > 0 ? (
+                  <div className="plan-active-day-preview">
+                    <strong>{activeDayLabel} exercises</strong>
+                    {activeDayAssignments.map((assignment) => (
+                      <small key={assignment.workoutPlanExerciseId}>
+                        {assignment.Exercise?.name || `Exercise #${assignment.exerciseId}`} - {assignment.targetSets} sets x {assignment.targetReps} reps
+                      </small>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              <div className="plan-preview-list" hidden>
                 {planAssignments(latestPlan).map((assignment) => (
                   <span key={assignment.workoutPlanExerciseId}>
                     {assignment.dayLabel}: {assignment.Exercise?.name || `Exercise #${assignment.exerciseId}`} · {assignment.targetSets} sets · {assignment.targetReps} reps
                   </span>
                 ))}
               </div>
+              </>
             ) : (
               <p>No workout plan generated yet.</p>
             )}

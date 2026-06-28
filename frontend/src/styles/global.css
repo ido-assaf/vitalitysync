@@ -2945,6 +2945,32 @@ textarea:focus {
   font-weight: 800;
 }
 
+.plan-preview-list--summary {
+  align-items: flex-start;
+}
+
+.plan-active-day-preview {
+  display: grid;
+  flex-basis: 100%;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  background: #f8fbfa;
+  border: 1px solid #d8e6df;
+  border-radius: 8px;
+}
+
+.plan-active-day-preview strong {
+  color: var(--ink);
+  font-size: 0.86rem;
+}
+
+.plan-active-day-preview small {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
 .session-progress-bar {
   height: 8px;
   overflow: hidden;
