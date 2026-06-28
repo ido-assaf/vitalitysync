@@ -2935,6 +2935,10 @@ textarea:focus {
   gap: 8px;
 }
 
+.plan-preview-list[hidden] {
+  display: none;
+}
+
 .plan-preview-list span {
   padding: 8px 10px;
   color: var(--green-dark);
