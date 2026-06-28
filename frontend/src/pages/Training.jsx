@@ -360,8 +360,12 @@ function Training() {
         return;
       }
 
-      setCoachResponses((current) => [response, ...current].slice(0, 3));
-      setLiveMessage(`Coach response: ${response.message}`);
+      const receivedResponse = {
+        ...response,
+        sentAt: response.sentAt || new Date().toISOString()
+      };
+      setCoachResponses((current) => [receivedResponse, ...current].slice(0, 3));
+      setLiveMessage("New coach response received.");
     });
 
     socket.on("workout:finished", (session) => {
@@ -1074,11 +1078,12 @@ function Training() {
       ) : null}
       {coachResponses.length > 0 ? (
         <section className="coach-response-panel" aria-label="Live coach responses">
-          <strong>Coach response</strong>
+          <strong>Coach Response</strong>
           {coachResponses.map((response) => (
-            <p key={`${response.workoutSessionId}-${response.sentAt}`}>
-              {response.message}
-            </p>
+            <article key={`${response.workoutSessionId}-${response.sentAt}`}>
+              <p>{response.message}</p>
+              <time>{new Date(response.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
+            </article>
           ))}
         </section>
       ) : null}

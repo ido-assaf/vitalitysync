@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node src/server.js",
-    "test": "node --test --test-isolation=none tests/aiService.test.js tests/nutritionService.test.js tests/openFoodFactsService.test.js tests/nutritionEvaluationStore.test.js tests/nutritionEstimateStore.test.js tests/nutritionPhoto.test.js",
+    "test": "node --test --test-isolation=none tests/aiService.test.js tests/aiSpecialistAvailability.test.js tests/nutritionService.test.js tests/openFoodFactsService.test.js tests/nutritionEvaluationStore.test.js tests/nutritionEstimateStore.test.js tests/nutritionPhoto.test.js",
     "migrate:ai-coaches": "node scripts/migrateAiCoachArchitecture.js",
     "migrate:nutrition": "node scripts/migrateNutritionArchitecture.js",
     "repair:assignment4": "node scripts/repairAssignment4Schema.js",

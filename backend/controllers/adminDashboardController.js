@@ -11,6 +11,10 @@ const {
 } = require("../models");
 const { successResponse } = require("../models/response");
 const asyncHandler = require("../utils/asyncHandler");
+const {
+  decorateSpecialist,
+  isAvailableFitnessCoach
+} = require("../utils/aiSpecialistAvailability");
 const { notFound, parseId, validationError } = require("../utils/controllerHelpers");
 
 const planInclude = [
@@ -45,7 +49,7 @@ const getAiCoaches = asyncHandler(async (req, res) => {
   });
 
   const data = specialists.map((specialist) => {
-    const plain = specialist.toJSON();
+    const plain = decorateSpecialist(specialist);
     return {
       ...plain,
       assignedTraineeCount: Array.isArray(plain.TraineeProfiles)
@@ -113,18 +117,12 @@ const assignAiCoach = asyncHandler(async (req, res) => {
     requestedSpecialistId !== ""
   ) {
     aiSpecialistId = Number(requestedSpecialistId);
-    const specialist = await AiSpecialist.findOne({
-      where: {
-        specialistId: aiSpecialistId,
-        domain: "training",
-        isActive: true
-      }
-    });
+    const specialist = await AiSpecialist.findByPk(aiSpecialistId);
 
-    if (!specialist) {
+    if (!isAvailableFitnessCoach(specialist)) {
       return validationError(
         res,
-        "Only active training specialists can be assigned to trainees.",
+        "Only the available Fitness Coach can be assigned to trainee workout profiles.",
         { aiSpecialistId }
       );
     }

@@ -1,6 +1,7 @@
 const { AiSpecialist, TraineeProfile } = require("../models");
 const { successResponse } = require("../models/response");
 const asyncHandler = require("../utils/asyncHandler");
+const { isAvailableFitnessCoach } = require("../utils/aiSpecialistAvailability");
 const { parseId, validationError } = require("../utils/controllerHelpers");
 
 function stringArray(value) {
@@ -18,6 +19,10 @@ function optionalNumber(value) {
 
   const parsed = Number(value);
   return Number.isNaN(parsed) ? null : parsed;
+}
+
+function hasOwnField(body, field) {
+  return Object.prototype.hasOwnProperty.call(body, field);
 }
 
 function validateProfileBody(body) {
@@ -77,27 +82,72 @@ function validateProfileBody(body) {
   return Object.keys(details).length > 0 ? details : null;
 }
 
-async function buildProfilePayload(body) {
+async function resolveAiSpecialistId(body, existingProfile) {
+  if (!hasOwnField(body, "aiSpecialistId")) {
+    return {
+      value: existingProfile ? existingProfile.aiSpecialistId : null
+    };
+  }
+
+  if (
+    body.aiSpecialistId === null ||
+    body.aiSpecialistId === undefined ||
+    body.aiSpecialistId === ""
+  ) {
+    return { value: null };
+  }
+
+  const aiSpecialistId = Number(body.aiSpecialistId);
+  if (!Number.isInteger(aiSpecialistId) || aiSpecialistId <= 0) {
+    return {
+      details: {
+        aiSpecialistId: "aiSpecialistId must be an available Fitness Coach id."
+      }
+    };
+  }
+
+  const specialist = await AiSpecialist.findByPk(aiSpecialistId);
+  if (!isAvailableFitnessCoach(specialist)) {
+    return {
+      details: {
+        aiSpecialistId: "Only the available Fitness Coach can be selected for workout planning."
+      }
+    };
+  }
+
+  return { value: aiSpecialistId };
+}
+
+async function buildProfilePayload(body, existingProfile = null) {
+  const resolvedSpecialist = await resolveAiSpecialistId(body, existingProfile);
+
+  if (resolvedSpecialist.details) {
+    return { validationDetails: resolvedSpecialist.details };
+  }
+
   return {
-    userId: body.userId,
-    goal: body.goal.trim(),
-    level: body.level.trim(),
-    age: optionalNumber(body.age),
-    weight: optionalNumber(body.weight),
-    height: optionalNumber(body.height),
-    biologicalSex: body.biologicalSex || null,
-    trainingDaysPerWeek: body.trainingDaysPerWeek,
-    preferredStyle: body.preferredStyle.trim(),
-    equipmentAccess: stringArray(body.equipmentAccess),
-    injuries: stringArray(body.injuries),
-    limitations: stringArray(body.limitations),
-    likedExercises: stringArray(body.likedExercises),
-    dislikedExercises: stringArray(body.dislikedExercises),
-    specialtyPreferences:
-      typeof body.specialtyPreferences === "object" && body.specialtyPreferences !== null
-        ? body.specialtyPreferences
-        : {},
-    freeTextNotes: typeof body.freeTextNotes === "string" ? body.freeTextNotes.trim() : ""
+    payload: {
+      userId: body.userId,
+      aiSpecialistId: resolvedSpecialist.value,
+      goal: body.goal.trim(),
+      level: body.level.trim(),
+      age: optionalNumber(body.age),
+      weight: optionalNumber(body.weight),
+      height: optionalNumber(body.height),
+      biologicalSex: body.biologicalSex || null,
+      trainingDaysPerWeek: body.trainingDaysPerWeek,
+      preferredStyle: body.preferredStyle.trim(),
+      equipmentAccess: stringArray(body.equipmentAccess),
+      injuries: stringArray(body.injuries),
+      limitations: stringArray(body.limitations),
+      likedExercises: stringArray(body.likedExercises),
+      dislikedExercises: stringArray(body.dislikedExercises),
+      specialtyPreferences:
+        typeof body.specialtyPreferences === "object" && body.specialtyPreferences !== null
+          ? body.specialtyPreferences
+          : {},
+      freeTextNotes: typeof body.freeTextNotes === "string" ? body.freeTextNotes.trim() : ""
+    }
   };
 }
 
@@ -126,7 +176,16 @@ const createProfile = asyncHandler(async (req, res) => {
   }
 
   const existingProfile = await TraineeProfile.findOne({ where: { userId: req.body.userId } });
-  const payload = await buildProfilePayload(req.body);
+  const { payload, validationDetails: specialistValidationDetails } =
+    await buildProfilePayload(req.body, existingProfile);
+
+  if (specialistValidationDetails) {
+    return validationError(
+      res,
+      "Trainee profile request body is invalid.",
+      specialistValidationDetails
+    );
+  }
 
   if (existingProfile) {
     await existingProfile.update(payload);
@@ -152,8 +211,17 @@ const updateProfile = asyncHandler(async (req, res) => {
     return validationError(res, "Trainee profile request body is invalid.", validationDetails);
   }
 
-  const payload = await buildProfilePayload({ ...req.body, userId });
   let profile = await TraineeProfile.findOne({ where: { userId } });
+  const { payload, validationDetails: specialistValidationDetails } =
+    await buildProfilePayload({ ...req.body, userId }, profile);
+
+  if (specialistValidationDetails) {
+    return validationError(
+      res,
+      "Trainee profile request body is invalid.",
+      specialistValidationDetails
+    );
+  }
 
   if (profile) {
     await profile.update(payload);
@@ -167,5 +235,10 @@ const updateProfile = asyncHandler(async (req, res) => {
 module.exports = {
   createProfile,
   getProfileByUserId,
-  updateProfile
+  updateProfile,
+  _internals: {
+    buildProfilePayload,
+    resolveAiSpecialistId,
+    validateProfileBody
+  }
 };

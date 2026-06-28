@@ -29,11 +29,35 @@ const emptyForm = {
   isActive: true
 };
 
-const coachResponseOptions = [
-  "Reduce weight by 10% and continue carefully.",
-  "Skip this exercise today and move to the next one.",
-  "Lower the reps and stop if pain continues."
-];
+function suggestCoachResponse(issueMessage) {
+  const message = String(issueMessage || "").toLowerCase();
+
+  if (/\b(pain|hurt|injury|injured|ache|sore)\b/.test(message)) {
+    return "Stop this exercise now. Rest and switch to a pain-free movement.";
+  }
+
+  if (message.includes("no time") || /\b(rush|rushed|late|hurry|quick)\b/.test(message)) {
+    return "Prioritize the current main exercise, then finish the workout early.";
+  }
+
+  if (/\b(tired|fatigue|exhausted|drained|weak)\b/.test(message)) {
+    return "Rest 2 minutes, then reduce the next set by 2 reps.";
+  }
+
+  if (message.includes("too much") || /\b(heavy|hard|difficult|struggle)\b/.test(message)) {
+    return "Reduce the weight by 10-15% and continue only with good form.";
+  }
+
+  if (/\b(equipment|busy|unavailable|taken|occupied|machine)\b/.test(message)) {
+    return "Skip this exercise for now and continue with the next available movement.";
+  }
+
+  return "Pause, adjust safely, and continue only if you feel comfortable.";
+}
+
+function responseDraftValue(draft, issueMessage) {
+  return draft.message ?? suggestCoachResponse(issueMessage);
+}
 
 function asList(value, fallback = "None") {
   return Array.isArray(value) && value.length > 0 ? value.join(", ") : fallback;
@@ -284,8 +308,7 @@ function AdminDashboard() {
       setSelectedCoachId(
         (current) =>
           current ||
-          coachData.find((specialist) => specialist.domain === "training")?.specialistId ||
-          coachData[0]?.specialistId ||
+          coachData.find((specialist) => specialist.isWorkoutAssignable)?.specialistId ||
           null
       );
       setStatus("ready");
@@ -537,9 +560,8 @@ function AdminDashboard() {
   function handleCoachResponse(event) {
     const issue = event.payload || {};
     const draft = responseDrafts[event.id] || {};
-    const cannedMessage = draft.canned || coachResponseOptions[0];
-    const customMessage = String(draft.custom || "").trim();
-    const messageText = customMessage || cannedMessage;
+    const suggestedMessage = suggestCoachResponse(issue.message);
+    const messageText = String(responseDraftValue(draft, issue.message)).trim();
 
     if (!socketRef.current || socketStatus !== "connected") {
       setMessage("Live socket is not connected yet. Try again in a moment.");
@@ -557,7 +579,7 @@ function AdminDashboard() {
       issueId: issue.issueId,
       workoutSessionId: issue.workoutSessionId,
       userId: issue.userId,
-      responseType: customMessage ? "custom" : "preset",
+      responseType: messageText === suggestedMessage ? "suggested" : "edited",
       message: messageText
     });
 
@@ -818,10 +840,15 @@ function AdminDashboard() {
                 <Badge tone={coach.isActive ? "mint" : "gold"}>
                   {coach.isActive ? "active" : "inactive"}
                 </Badge>
+                <Badge tone={coach.availabilityStatus === "available" ? "mint" : "gold"}>
+                  {coach.availabilityLabel || "Coming soon"}
+                </Badge>
                 <Badge tone="mint">{coach.assignedTraineeCount} trainees</Badge>
               </div>
-              {coach.domain === "nutrition" ? (
-                <small>Used automatically by NutriScan when active.</small>
+              {coach.isNutritionAvailable ? (
+                <small>Used automatically by Nutrition/NutriScan guidance.</small>
+              ) : coach.availabilityStatus === "coming_soon" ? (
+                <small>Future development. This specialist is visible but not assignable yet.</small>
               ) : null}
               <small>{asList(coach.rules, "No guidance rules")}</small>
               <div className="button-row">
@@ -897,7 +924,7 @@ function AdminDashboard() {
             <h2>{selectedCoach?.name || "Choose a specialist"}</h2>
           </div>
 
-          {selectedCoach?.domain === "training" ? (
+          {selectedCoach?.isWorkoutAssignable ? (
             <>
               <label>
                 Assign trainee
@@ -947,8 +974,10 @@ function AdminDashboard() {
                 </div>
               )}
             </>
-          ) : selectedCoach ? (
+          ) : selectedCoach?.isNutritionAvailable ? (
             <EmptyState title="Nutrition specialist" message="Active nutrition specialists are selected automatically by NutriScan and are not assigned to trainee workout profiles." />
+          ) : selectedCoach ? (
+            <EmptyState title="Coming soon" message="This specialist is planned for future development and cannot be assigned yet." />
           ) : (
             <EmptyState title="Choose a specialist" message="Select a specialist card to review its configuration." />
           )}
@@ -1117,6 +1146,7 @@ function AdminDashboard() {
                         const tone = eventTone(event.type);
                         const isIssue = event.type === "workout:issueReported" && !event.payload?.error;
                         const responseDraft = responseDrafts[event.id] || {};
+                        const suggestedResponse = responseDraftValue(responseDraft, event.payload?.message);
                         const responseSent = Boolean(event.payload?.coachResponseSent);
                         return (
                           <article className="admin-event-row" key={event.id}>
@@ -1136,26 +1166,15 @@ function AdminDashboard() {
                                   </span>
                                 ) : (
                                   <>
-                                    <select
-                                      value={responseDraft.canned || coachResponseOptions[0]}
-                                      onChange={(changeEvent) =>
-                                        updateResponseDraft(event.id, { canned: changeEvent.target.value })
-                                      }
-                                    >
-                                      {coachResponseOptions.map((option) => (
-                                        <option key={option} value={option}>
-                                          {option}
-                                        </option>
-                                      ))}
-                                    </select>
+                                    <small>Suggested response</small>
                                     <input
                                       type="text"
                                       maxLength="180"
-                                      value={responseDraft.custom || ""}
+                                      value={suggestedResponse}
                                       onChange={(changeEvent) =>
-                                        updateResponseDraft(event.id, { custom: changeEvent.target.value })
+                                        updateResponseDraft(event.id, { message: changeEvent.target.value })
                                       }
-                                      placeholder="Optional custom response"
+                                      placeholder="Coach response"
                                     />
                                     <button
                                       type="button"

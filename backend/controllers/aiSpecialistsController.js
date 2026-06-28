@@ -1,6 +1,9 @@
 const { AiSpecialist, TraineeProfile } = require("../models");
 const { errorResponse, successResponse } = require("../models/response");
 const createCrudController = require("../utils/resourceControllerFactory");
+const asyncHandler = require("../utils/asyncHandler");
+const { decorateSpecialist } = require("../utils/aiSpecialistAvailability");
+const { notFound, parseId, validationError } = require("../utils/controllerHelpers");
 
 function isStringArray(value) {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
@@ -53,9 +56,34 @@ const controller = createCrudController({
   buildUpdatePayload: buildAiSpecialistPayload
 });
 
+const getAiSpecialists = asyncHandler(async (req, res) => {
+  const specialists = await AiSpecialist.findAll({
+    order: [["specialistId", "ASC"]]
+  });
+
+  return res.status(200).json(successResponse(specialists.map(decorateSpecialist)));
+});
+
+const getAiSpecialistById = asyncHandler(async (req, res) => {
+  const specialistId = parseId(req.params.id);
+
+  if (specialistId === null) {
+    return validationError(res, "AI specialist id must be a valid number.", {
+      id: req.params.id
+    });
+  }
+
+  const specialist = await AiSpecialist.findByPk(specialistId);
+  if (!specialist) {
+    return notFound(res, "AI specialist was not found.", { specialistId });
+  }
+
+  return res.status(200).json(successResponse(decorateSpecialist(specialist)));
+});
+
 module.exports = {
-  getAiSpecialists: controller.list,
-  getAiSpecialistById: controller.getById,
+  getAiSpecialists,
+  getAiSpecialistById,
   createAiSpecialist: controller.create,
   updateAiSpecialist: controller.update,
   deleteAiSpecialist: async (req, res, next) => {

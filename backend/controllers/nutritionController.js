@@ -39,6 +39,10 @@ const {
   getEstimateSnapshot
 } = require("../services/nutritionEstimateStore");
 const asyncHandler = require("../utils/asyncHandler");
+const {
+  availableNutritionistWhere,
+  isAvailableNutritionist
+} = require("../utils/aiSpecialistAvailability");
 
 function currentUserId(req) {
   const userId = Number(req.header("x-user-id"));
@@ -265,24 +269,14 @@ async function resolveNutritionSpecialist(userId) {
   });
   const assigned = traineeProfile?.AiSpecialist;
 
-  if (assigned?.domain === "nutrition" && assigned.isActive !== false) {
+  if (isAvailableNutritionist(assigned)) {
     return assigned;
   }
 
-  return (
-    (await AiSpecialist.findOne({
-      where: {
-        domain: "nutrition",
-        specialty: "sports nutrition",
-        isActive: true
-      },
-      order: [["specialistId", "ASC"]]
-    })) ||
-    (await AiSpecialist.findOne({
-      where: { domain: "nutrition", isActive: true },
-      order: [["specialistId", "ASC"]]
-    }))
-  );
+  return AiSpecialist.findOne({
+    where: availableNutritionistWhere(),
+    order: [["specialistId", "ASC"]]
+  });
 }
 
 function fallbackGuidance({ portionNutrition, nutritionProfile, projectedTotals }) {
@@ -1045,5 +1039,8 @@ module.exports = {
   searchFoodProducts,
   upsertOwnProfile,
   validateMealEstimateBody,
-  validateReviewedNutrition
+  validateReviewedNutrition,
+  _internals: {
+    resolveNutritionSpecialist
+  }
 };

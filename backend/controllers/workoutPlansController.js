@@ -8,6 +8,7 @@ const {
 } = require("../models");
 const { errorResponse, successResponse } = require("../models/response");
 const asyncHandler = require("../utils/asyncHandler");
+const { availableFitnessCoachWhere } = require("../utils/aiSpecialistAvailability");
 const createCrudController = require("../utils/resourceControllerFactory");
 
 const SUGGESTED_PLAN_PREFIX = "[ONBOARDING_SUGGESTED_PLAN]";
@@ -1000,16 +1001,14 @@ async function upsertSuggestedWorkoutPlanForUser(userId) {
 
   let aiCoach = profile.aiSpecialistId
     ? await AiSpecialist.findOne({
-        where: {
-          specialistId: profile.aiSpecialistId,
-          domain: "training",
-          isActive: true
-        }
+        where: availableFitnessCoachWhere({
+          specialistId: profile.aiSpecialistId
+        })
       })
     : null;
   if (!aiCoach) {
     aiCoach = await AiSpecialist.findOne({
-      where: { domain: "training", isActive: true },
+      where: availableFitnessCoachWhere(),
       order: [["specialistId", "ASC"]]
     });
   }
@@ -1143,5 +1142,9 @@ module.exports = {
   updateWorkoutPlan: controller.update,
   deleteWorkoutPlan: controller.remove,
   suggestWorkoutPlan,
-  backfillEmptySuggestedPlans
+  backfillEmptySuggestedPlans,
+  _internals: {
+    buildSuggestedNotes,
+    upsertSuggestedWorkoutPlanForUser
+  }
 };

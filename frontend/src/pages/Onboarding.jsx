@@ -5,6 +5,7 @@ import LoadingState from "../components/LoadingState";
 import PageHeader from "../components/PageHeader";
 import {
   createTraineeProfile,
+  getAISpecialists,
   getStoredUser,
   getTraineeProfile,
   suggestWorkoutPlan,
@@ -57,11 +58,25 @@ function specialtyPrompt(specialty) {
   }
 }
 
+function roleDescription(specialist) {
+  if (specialist?.isWorkoutAssignable) {
+    return "Selected for workout planning.";
+  }
+
+  if (specialist?.isNutritionAvailable) {
+    return "Used for Nutrition/NutriScan guidance.";
+  }
+
+  return "Future development.";
+}
+
 function Onboarding() {
   const navigate = useNavigate();
   const storedUser = getStoredUser();
   const [form, setForm] = useState(emptyForm);
+  const [aiSpecialists, setAiSpecialists] = useState([]);
   const [aiCoach, setAiCoach] = useState(null);
+  const [selectedAiSpecialistId, setSelectedAiSpecialistId] = useState("");
   const [hasProfile, setHasProfile] = useState(false);
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
@@ -72,10 +87,31 @@ function Onboarding() {
       setError("");
 
       try {
-        const profile = await getTraineeProfile(storedUser.userId);
+        const [profile, specialistData] = await Promise.all([
+          getTraineeProfile(storedUser.userId),
+          getAISpecialists()
+        ]);
+        const specialists = Array.isArray(specialistData) ? specialistData : [];
+        const availableFitnessCoach = specialists.find(
+          (specialist) => specialist.isWorkoutAssignable
+        );
+
+        setAiSpecialists(specialists);
 
         if (profile) {
-          setAiCoach(profile.AiSpecialist || null);
+          const assignedSpecialistId =
+            profile.aiSpecialistId || profile.AiSpecialist?.specialistId || "";
+          const assignedFitnessCoach = specialists.find(
+            (specialist) =>
+              specialist.isWorkoutAssignable &&
+              String(specialist.specialistId) === String(assignedSpecialistId)
+          );
+          const selectedFitnessCoach = assignedFitnessCoach || availableFitnessCoach || null;
+
+          setSelectedAiSpecialistId(
+            selectedFitnessCoach ? String(selectedFitnessCoach.specialistId) : ""
+          );
+          setAiCoach(selectedFitnessCoach || profile.AiSpecialist || null);
           setHasProfile(true);
           setForm({
             goal: profile.goal || emptyForm.goal,
@@ -95,6 +131,11 @@ function Onboarding() {
             specialtyNotes: profile.specialtyPreferences?.notes || "",
             freeTextNotes: profile.freeTextNotes || ""
           });
+        } else {
+          setSelectedAiSpecialistId(
+            availableFitnessCoach ? String(availableFitnessCoach.specialistId) : ""
+          );
+          setAiCoach(availableFitnessCoach || null);
         }
 
         setStatus("ready");
@@ -119,8 +160,17 @@ function Onboarding() {
   }
 
   function profilePayload() {
+    const selectedWorkoutSpecialist = aiSpecialists.find(
+      (specialist) =>
+        specialist.isWorkoutAssignable &&
+        String(specialist.specialistId) === String(selectedAiSpecialistId)
+    );
+
     return {
       userId: storedUser.userId,
+      aiSpecialistId: selectedWorkoutSpecialist
+        ? Number(selectedWorkoutSpecialist.specialistId)
+        : null,
       goal: form.goal,
       level: form.level,
       age: form.age ? Number(form.age) : null,
@@ -135,7 +185,7 @@ function Onboarding() {
       likedExercises: toList(form.likedExercises),
       dislikedExercises: toList(form.dislikedExercises),
       specialtyPreferences: {
-        aiCoachSpecialty: aiCoach?.specialty || "general fitness",
+        aiCoachSpecialty: selectedWorkoutSpecialist?.specialty || "general fitness",
         focus: form.specialtyFocus,
         notes: form.specialtyNotes
       },
@@ -170,6 +220,11 @@ function Onboarding() {
   if (status === "error") {
     return <ErrorState message={error} />;
   }
+
+  const selectedAiCoach =
+    aiSpecialists.find(
+      (specialist) => String(specialist.specialistId) === String(selectedAiSpecialistId)
+    ) || aiCoach;
 
   return (
     <div className="stack">
@@ -306,13 +361,55 @@ function Onboarding() {
 
         <section className="settings-page onboarding-step onboarding-step--featured">
           <div className="section-heading">
-            <p className="eyebrow">{aiCoach?.specialty || "AI guidance preferences"}</p>
-            <h2>{specialtyPrompt(aiCoach?.specialty)}</h2>
+            <p className="eyebrow">{selectedAiCoach?.specialty || "AI guidance preferences"}</p>
+            <h2>{specialtyPrompt(selectedAiCoach?.specialty)}</h2>
             <p>
-              {aiCoach
-                ? `${aiCoach.name} will use this context when shaping your workout plan.`
-                : "Your profile will use general fitness guidance until an admin assigns an AI coach."}
+              {selectedAiCoach?.isWorkoutAssignable
+                ? `${selectedAiCoach.name} will use this context when shaping your workout plan.`
+                : "Choose the available Fitness Coach for workout planning. The Nutritionist is available separately for Nutrition/NutriScan guidance."}
             </p>
+          </div>
+
+          <div className="specialist-choice-group">
+            <div>
+              <p className="eyebrow">Choose your AI Specialists</p>
+              <h3>Available professionals</h3>
+            </div>
+            {aiSpecialists.length === 0 ? (
+              <p className="specialist-choice-empty">No AI specialists are configured yet.</p>
+            ) : (
+              <div className="specialist-choice-grid">
+                {aiSpecialists.map((specialist) => {
+                  const selectable = specialist.isWorkoutAssignable;
+                  const selected =
+                    selectable &&
+                    String(specialist.specialistId) === String(selectedAiSpecialistId);
+                  const statusText =
+                    specialist.availabilityLabel ||
+                    (selectable ? "Available Fitness Coach" : "Coming soon");
+
+                  return (
+                    <button
+                      key={specialist.specialistId}
+                      type="button"
+                      className={`specialist-choice-card ${
+                        selected ? "specialist-choice-card--selected" : ""
+                      }`}
+                      disabled={!selectable}
+                      aria-pressed={selectable ? selected : undefined}
+                      onClick={() => {
+                        setSelectedAiSpecialistId(String(specialist.specialistId));
+                        setAiCoach(specialist);
+                      }}
+                    >
+                      <span>{statusText}</span>
+                      <strong>{specialist.name}</strong>
+                      <small>{roleDescription(specialist)}</small>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <label>
