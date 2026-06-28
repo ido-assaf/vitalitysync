@@ -1422,13 +1422,15 @@ function AdminDashboard() {
                   </div>
                 ) : null}
               </div>
-              <div className="plan-preview-list" hidden>
+              {false ? (
+              <div className="plan-preview-list">
                 {planAssignments(latestPlan).map((assignment) => (
                   <span key={assignment.workoutPlanExerciseId}>
                     {assignment.dayLabel}: {assignment.Exercise?.name || `Exercise #${assignment.exerciseId}`} · {assignment.targetSets} sets · {assignment.targetReps} reps
                   </span>
                 ))}
               </div>
+              ) : null}
               </>
             ) : (
               <p>No workout plan generated yet.</p>
