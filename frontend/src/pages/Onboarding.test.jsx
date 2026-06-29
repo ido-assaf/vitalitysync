@@ -68,14 +68,11 @@ beforeEach(() => {
   suggestWorkoutPlan.mockResolvedValue({});
 });
 
-test("shows available and future AI specialists honestly during onboarding", async () => {
+test("shows workout specialists honestly during onboarding without a fake Nutritionist choice", async () => {
   renderOnboarding();
 
   const fitnessCoach = await screen.findByRole("button", {
     name: /Available Fitness Coach Strength Training AI Coach Selected for workout planning/i
-  });
-  const nutritionist = screen.getByRole("button", {
-    name: /Available Nutritionist VitalitySync Nutritionist Used for Nutrition\/NutriScan guidance/i
   });
   const runningCoach = screen.getByRole("button", {
     name: /Coming soon Running AI Coach Future development/i
@@ -83,8 +80,15 @@ test("shows available and future AI specialists honestly during onboarding", asy
 
   expect(fitnessCoach).toBeEnabled();
   expect(fitnessCoach).toHaveAttribute("aria-pressed", "true");
-  expect(nutritionist).toBeDisabled();
   expect(runningCoach).toBeDisabled();
+  expect(
+    screen.queryByRole("button", {
+      name: /Available Nutritionist VitalitySync Nutritionist/i
+    })
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByText("Nutritionist AI is ready in Nutrition/NutriScan. No setup choice is needed here.")
+  ).toBeInTheDocument();
 });
 
 test("saves the selected Fitness Coach id with the trainee profile", async () => {

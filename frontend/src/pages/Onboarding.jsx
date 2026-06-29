@@ -225,6 +225,11 @@ function Onboarding() {
     aiSpecialists.find(
       (specialist) => String(specialist.specialistId) === String(selectedAiSpecialistId)
     ) || aiCoach;
+  const workoutSpecialistOptions = aiSpecialists.filter(
+    (specialist) =>
+      specialist.isWorkoutAssignable ||
+      String(specialist.domain || "").toLowerCase() === "training"
+  );
 
   return (
     <div className="stack">
@@ -372,14 +377,14 @@ function Onboarding() {
 
           <div className="specialist-choice-group">
             <div>
-              <p className="eyebrow">Choose your AI Specialists</p>
-              <h3>Available professionals</h3>
+              <p className="eyebrow">Choose your Fitness Coach</p>
+              <h3>Workout planning specialist</h3>
             </div>
-            {aiSpecialists.length === 0 ? (
-              <p className="specialist-choice-empty">No AI specialists are configured yet.</p>
+            {workoutSpecialistOptions.length === 0 ? (
+              <p className="specialist-choice-empty">No Fitness Coach is configured yet.</p>
             ) : (
               <div className="specialist-choice-grid">
-                {aiSpecialists.map((specialist) => {
+                {workoutSpecialistOptions.map((specialist) => {
                   const selectable = specialist.isWorkoutAssignable;
                   const selected =
                     selectable &&
@@ -410,6 +415,9 @@ function Onboarding() {
                 })}
               </div>
             )}
+            <p className="specialist-choice-note">
+              Nutritionist AI is ready in Nutrition/NutriScan. No setup choice is needed here.
+            </p>
           </div>
 
           <label>
