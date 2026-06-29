@@ -10,6 +10,8 @@ const apiClient = axios.create({
   }
 });
 
+const THEMES = new Set(["system", "light", "dark"]);
+
 function unwrapResponse(response) {
   if (!response.data.success) {
     throw new Error(response.data.error?.message || "Request failed.");
@@ -79,12 +81,43 @@ export function getStoredUser() {
   }
 }
 
+function systemTheme() {
+  if (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches
+  ) {
+    return "dark";
+  }
+
+  return "light";
+}
+
+export function applyThemePreference(theme = "system") {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  const preference = THEMES.has(theme) ? theme : "system";
+  const resolvedTheme = preference === "system" ? systemTheme() : preference;
+
+  document.documentElement.dataset.themePreference = preference;
+  document.documentElement.dataset.theme = resolvedTheme;
+  document.documentElement.style.colorScheme = resolvedTheme;
+}
+
+export function applyStoredTheme() {
+  applyThemePreference(getStoredUser()?.theme || "system");
+}
+
 export function saveStoredUser(user) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+  applyThemePreference(user?.theme || "system");
 }
 
 export function clearStoredUser() {
   localStorage.removeItem(STORAGE_KEY);
+  applyThemePreference("system");
 }
 
 export function login(emailOrCredentials, password) {

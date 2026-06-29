@@ -29,6 +29,7 @@ function NavIcon({ name, size = 18 }) {
 function Navbar() {
   const navigate = useNavigate();
   const [user, setUser] = useState(getStoredUser());
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   useEffect(() => {
     async function loadCurrentUser() {
@@ -51,6 +52,10 @@ function Navbar() {
       clearStoredUser();
       navigate("/login", { replace: true });
     }
+  }
+
+  function toggleUserMenu() {
+    setIsUserMenuOpen((current) => !current);
   }
 
   const displayName = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() : "Guest";
@@ -91,9 +96,25 @@ function Navbar() {
         ) : null}
         <span className="navbar__avatar" aria-hidden="true">{initials}</span>
         <span className="navbar__name">{displayName}</span>
-        <button type="button" className="navbar__logout" onClick={handleLogout} title="Log out">
-          <span>Logout</span><NavIcon name="chevron" size={16} />
-        </button>
+        <div className="navbar__user-menu">
+          <button
+            type="button"
+            className="navbar__user-toggle"
+            onClick={toggleUserMenu}
+            aria-label="Open user menu"
+            aria-expanded={isUserMenuOpen}
+            aria-haspopup="menu"
+          >
+            <NavIcon name="chevron" size={16} />
+          </button>
+          {isUserMenuOpen ? (
+            <div className="navbar__user-dropdown" role="menu">
+              <button type="button" className="navbar__logout" onClick={handleLogout} role="menuitem">
+                Log out
+              </button>
+            </div>
+          ) : null}
+        </div>
       </div>
     </header>
   );

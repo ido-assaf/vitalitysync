@@ -4,6 +4,14 @@ jest.mock("axios", () => ({
   create: () => mockApiClient
 }));
 
+beforeEach(() => {
+  mockApiClient.mockReset();
+  localStorage.clear();
+  delete document.documentElement.dataset.theme;
+  delete document.documentElement.dataset.themePreference;
+  document.documentElement.style.colorScheme = "";
+});
+
 test("login surfaces backend authentication errors before network fallbacks", async () => {
   const { login } = require("./api");
 
@@ -75,4 +83,29 @@ test("clears malformed or unsupported stored users", () => {
 
   expect(getStoredUser()).toBeNull();
   expect(localStorage.getItem("vitalitysyncUser")).toBeNull();
+});
+
+test("saveStoredUser applies the saved theme immediately", () => {
+  const { saveStoredUser } = require("./api");
+
+  saveStoredUser({ userId: 1, userRole: "trainee", theme: "dark" });
+
+  expect(document.documentElement.dataset.themePreference).toBe("dark");
+  expect(document.documentElement.dataset.theme).toBe("dark");
+  expect(document.documentElement.style.colorScheme).toBe("dark");
+});
+
+test("applyStoredTheme resolves a saved light preference", () => {
+  const { applyStoredTheme } = require("./api");
+
+  localStorage.setItem(
+    "vitalitysyncUser",
+    JSON.stringify({ userId: 1, userRole: "trainee", theme: "light" })
+  );
+
+  applyStoredTheme();
+
+  expect(document.documentElement.dataset.themePreference).toBe("light");
+  expect(document.documentElement.dataset.theme).toBe("light");
+  expect(document.documentElement.style.colorScheme).toBe("light");
 });

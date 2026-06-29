@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { useEffect } from "react";
 import Layout from "./components/Layout";
 import AdminDashboard from "./pages/AdminDashboard";
 import Dashboard from "./pages/Dashboard";
@@ -12,7 +13,7 @@ import Register from "./pages/Register";
 import Settings from "./pages/Settings";
 import Training from "./pages/Training";
 import WorkoutHistory from "./pages/WorkoutHistory";
-import { getStoredUser } from "./services/api";
+import { applyStoredTheme, getStoredUser } from "./services/api";
 
 function ProtectedRoute({ children }) {
   const user = getStoredUser();
@@ -27,6 +28,10 @@ function AdminRoute({ children }) {
 }
 
 function App() {
+  useEffect(() => {
+    applyStoredTheme();
+  }, []);
+
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
