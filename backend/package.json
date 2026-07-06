@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node src/server.js",
-    "test": "node --test --test-isolation=none tests/aiService.test.js tests/aiSpecialistAvailability.test.js tests/nutritionService.test.js tests/openFoodFactsService.test.js tests/nutritionEvaluationStore.test.js tests/nutritionEstimateStore.test.js tests/nutritionPhoto.test.js",
+    "test": "node --test --test-isolation=none tests/aiService.test.js tests/aiSpecialistAvailability.test.js tests/aiSpecialistContextService.test.js tests/aiSpecialistRuleService.test.js tests/aiSpecialistKnowledgeService.test.js tests/aiSpecialistPlanningModifierService.test.js tests/aiSpecialistPlanValidatorService.test.js tests/aiSpecialistGoldenProfiles.test.js tests/aiSpecialistProgressSummaryService.test.js tests/aiSpecialistAdaptationDecisionService.test.js tests/aiSpecialistPlanUpdateProposalService.test.js tests/aiSpecialistWeeklyCoachBriefService.test.js tests/aiSpecialistWeeklyReviewService.test.js tests/aiSpecialistProfessionalRecommendationService.test.js tests/freeTextClassificationService.test.js tests/workoutIssueSignalService.test.js tests/coachResponseSuggestionService.test.js tests/aiSpecialistWeeklyCheckInService.test.js tests/workoutPlansControllerPlanning.test.js tests/workoutPlansWeeklyReviewController.test.js tests/coachIntakeService.test.js tests/nutritionService.test.js tests/openFoodFactsService.test.js tests/nutritionEvaluationStore.test.js tests/nutritionEstimateStore.test.js tests/nutritionPhoto.test.js",
     "migrate:ai-coaches": "node scripts/migrateAiCoachArchitecture.js",
     "migrate:nutrition": "node scripts/migrateNutritionArchitecture.js",
     "repair:assignment4": "node scripts/repairAssignment4Schema.js",

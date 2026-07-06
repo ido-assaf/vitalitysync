@@ -501,7 +501,8 @@ async function generateNutritionGuidance({
   currentTotals,
   projectedTotals,
   nutritionProfile,
-  specialist
+  specialist,
+  specialistContext
 }) {
   if (!process.env.GROQ_API_KEY) {
     throw new Error("GROQ_API_KEY is not configured.");
@@ -511,6 +512,7 @@ async function generateNutritionGuidance({
 You are the AI nutritionist inside VitalitySync.
 All nutrition numbers below are trusted values already calculated by the backend.
 Do not invent, correct, restate, or estimate nutrition numbers.
+Respect any expertRules in the user history summary, especially hardStops and warnings.
 Give practical general guidance only, not medical advice.
 
 Return only valid JSON with exactly:
@@ -520,6 +522,9 @@ Allowed status values: recommended, neutral, caution.
 
 Nutrition specialist:
 ${JSON.stringify(specialist || null)}
+
+User history summary:
+${JSON.stringify(specialistContext || null)}
 
 User nutrition profile:
 ${JSON.stringify(nutritionProfile)}
@@ -577,7 +582,8 @@ async function generateNutritionTargets({
   workoutPlan,
   specialist,
   baseline,
-  nutritionContext
+  nutritionContext,
+  specialistContext
 }) {
   if (!process.env.GROQ_API_KEY) {
     throw new Error("GROQ_API_KEY is not configured.");
@@ -591,7 +597,9 @@ additional user context, specialist focus, and validated Mifflin-St Jeor baselin
 
 The backend baseline is the safety anchor. Keep both numeric targets within 15%
 of it. Consider the fitness goal, training frequency, workout duration, and
-training level. Do not provide medical advice.
+training level. Use the user history summary only for personalization and
+practical guidance. Respect any expertRules in that summary, especially
+hardStops and warnings. Do not provide medical advice.
 
 Return only valid JSON with exactly:
 dailyCalories, dailyProtein, dietaryApproach, mealGuidance, explanation, assumptions.
@@ -607,6 +615,9 @@ ${JSON.stringify(workoutPlan || null)}
 
 Nutrition specialist:
 ${JSON.stringify(specialist || null)}
+
+User history summary:
+${JSON.stringify(specialistContext || null)}
 
 Nutrition preferences and context:
 ${JSON.stringify(nutritionContext)}

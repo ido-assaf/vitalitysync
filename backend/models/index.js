@@ -1,6 +1,7 @@
 const sequelize = require("../config/database");
 const Admin = require("./Admin");
 const AiSpecialist = require("./AiSpecialist");
+const AiSpecialistSignalPattern = require("./AiSpecialistSignalPattern");
 const Exercise = require("./Exercise");
 const FoodProduct = require("./FoodProduct");
 const MealPlan = require("./MealPlan");
@@ -104,6 +105,7 @@ module.exports = {
   sequelize,
   Admin,
   AiSpecialist,
+  AiSpecialistSignalPattern,
   Exercise,
   FoodProduct,
   MealPlan,

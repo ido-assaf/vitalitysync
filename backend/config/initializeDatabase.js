@@ -2,6 +2,7 @@ const { sequelize } = require("../models");
 const { seedDatabase } = require("../seed/seedDatabase");
 const { migrateAiCoachArchitecture } = require("../scripts/migrateAiCoachArchitecture");
 const { migrateNutritionArchitecture } = require("../scripts/migrateNutritionArchitecture");
+const { migrateWorkoutIssueSignals } = require("../scripts/migrateWorkoutIssueSignals");
 
 async function initializeDatabase() {
   await sequelize.authenticate();
@@ -20,6 +21,7 @@ async function initializeDatabase() {
 
   await migrateAiCoachArchitecture();
   await migrateNutritionArchitecture();
+  await migrateWorkoutIssueSignals();
 }
 
 module.exports = {

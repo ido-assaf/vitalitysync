@@ -2,6 +2,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   extractJson,
+  generateNutritionGuidance,
+  generateNutritionTargets,
   normalizeMealEstimate,
   normalizeNutritionGuidance,
   normalizeNutritionTargets
@@ -78,6 +80,123 @@ test("accepts Nutritionist AI targets only inside the validated baseline range",
       ),
     /outside the validated range/
   );
+});
+
+test("nutrition target generation includes compact specialist context in the prompt", async () => {
+  const previousKey = process.env.GROQ_API_KEY;
+  const previousFetch = global.fetch;
+  let requestBody;
+
+  try {
+    process.env.GROQ_API_KEY = "test-key";
+    global.fetch = async (url, options) => {
+      requestBody = JSON.parse(options.body);
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  dailyCalories: 2520,
+                  dailyProtein: 142,
+                  dietaryApproach: "Protein-forward meals around training.",
+                  mealGuidance: "Use balanced meals and a protein-rich snack.",
+                  explanation: "Recent logs show protein is below target.",
+                  assumptions: ["Recent protein trend was considered"]
+                })
+              }
+            }
+          ]
+        })
+      };
+    };
+
+    const result = await generateNutritionTargets({
+      traineeProfile: { goal: "muscle gain", trainingDaysPerWeek: 4 },
+      workoutPlan: { daysPerWeek: 4, durationMinutes: 60 },
+      specialist: { name: "VitalitySync Nutritionist" },
+      baseline: {
+        suggestedCalories: 2500,
+        suggestedProtein: 140,
+        calculation: { method: "Mifflin-St Jeor" },
+        inputs: { nutritionGoal: "muscle gain" }
+      },
+      nutritionContext: { dietaryPreferences: ["high protein"] },
+      specialistContext: {
+        recentLogging: {
+          averageProteinVsTargetPercent: 70
+        },
+        guidancePatterns: {
+          lowConfidenceEstimateCount: 1
+        }
+      }
+    });
+
+    assert.equal(result.dailyCalories, 2525);
+    assert.match(requestBody.messages[1].content, /User history summary/);
+    assert.match(requestBody.messages[1].content, /averageProteinVsTargetPercent/);
+  } finally {
+    if (previousKey === undefined) delete process.env.GROQ_API_KEY;
+    else process.env.GROQ_API_KEY = previousKey;
+    global.fetch = previousFetch;
+  }
+});
+
+test("nutrition guidance generation includes compact specialist context in the prompt", async () => {
+  const previousKey = process.env.GROQ_API_KEY;
+  const previousFetch = global.fetch;
+  let requestBody;
+
+  try {
+    process.env.GROQ_API_KEY = "test-key";
+    global.fetch = async (url, options) => {
+      requestBody = JSON.parse(options.body);
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  status: "neutral",
+                  explanation: "This can fit today with the current targets.",
+                  practicalSuggestion: "Pair it with a protein-forward meal later."
+                })
+              }
+            }
+          ]
+        })
+      };
+    };
+
+    const result = await generateNutritionGuidance({
+      food: {
+        name: "Granola Bar",
+        brand: "Test",
+        ingredients: "oats, sugar",
+        allergens: []
+      },
+      portionNutrition: { calories: 180, protein: 4, carbs: 30, fat: 5, sugar: 12 },
+      currentTotals: { calories: 800, protein: 45 },
+      projectedTotals: { calories: 980, protein: 49 },
+      nutritionProfile: { dailyCaloriesTarget: 2200, dailyProteinTarget: 130 },
+      specialist: { name: "VitalitySync Nutritionist" },
+      specialistContext: {
+        guidancePatterns: {
+          cautionFoods: [{ value: "Chocolate Bar", count: 2 }]
+        }
+      }
+    });
+
+    assert.equal(result.status, "neutral");
+    assert.match(requestBody.messages[1].content, /User history summary/);
+    assert.match(requestBody.messages[1].content, /Chocolate Bar/);
+  } finally {
+    if (previousKey === undefined) delete process.env.GROQ_API_KEY;
+    else process.env.GROQ_API_KEY = previousKey;
+    global.fetch = previousFetch;
+  }
 });
 
 test("normalizes a strict homemade meal estimate", () => {

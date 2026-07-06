@@ -15,6 +15,10 @@ const {
   decorateSpecialist,
   isAvailableFitnessCoach
 } = require("../utils/aiSpecialistAvailability");
+const {
+  disableSignalPattern: disableCachedSignalPattern,
+  listSignalPatterns
+} = require("../services/aiSpecialistWeeklyCheckInService");
 const { notFound, parseId, validationError } = require("../utils/controllerHelpers");
 
 const planInclude = [
@@ -209,10 +213,38 @@ const getWorkoutHistory = asyncHandler(async (req, res) => {
   return res.status(200).json(successResponse(sessions));
 });
 
+const getSignalPatterns = asyncHandler(async (req, res) => {
+  const patterns = await listSignalPatterns({
+    limit: req.query.limit,
+    status: req.query.status
+  });
+
+  return res.status(200).json(successResponse(patterns));
+});
+
+const disableSignalPattern = asyncHandler(async (req, res) => {
+  const patternId = parseId(req.params.id);
+
+  if (patternId === null) {
+    return validationError(res, "Signal pattern id must be a valid number.", {
+      patternId: req.params.id
+    });
+  }
+
+  const pattern = await disableCachedSignalPattern(patternId);
+  if (!pattern) {
+    return notFound(res, "Signal pattern was not found.", { patternId });
+  }
+
+  return res.status(200).json(successResponse(pattern));
+});
+
 module.exports = {
   assignAiCoach,
+  disableSignalPattern,
   getAiCoaches,
   getLiveSessions,
+  getSignalPatterns,
   getTraineeDetails,
   getTrainees,
   getWorkoutHistory

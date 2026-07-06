@@ -29,6 +29,11 @@ const WorkoutIssue = sequelize.define(
       type: DataTypes.STRING,
       allowNull: false,
       defaultValue: "medium"
+    },
+    signals: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: null
     }
   },
   {

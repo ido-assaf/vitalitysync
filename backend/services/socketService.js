@@ -1,13 +1,18 @@
 const { Server } = require("socket.io");
 const {
+  AiSpecialist,
   Exercise,
   SetLog,
+  TraineeProfile,
   User,
   WorkoutIssue,
   WorkoutPlan,
   WorkoutPlanExercise,
   WorkoutSession
 } = require("../models");
+const { classifyAndAttachWorkoutIssueSignals } = require("./workoutIssueSignalService");
+const { buildCoachResponseSuggestions } = require("./coachResponseSuggestionService");
+const { availableFitnessCoachWhere } = require("../utils/aiSpecialistAvailability");
 
 const ADMIN_ROOM = "admin-monitoring";
 const TRAINEE_ROOM_PREFIX = "trainee-workout";
@@ -35,6 +40,71 @@ async function getSessionPayload(workoutSessionId) {
 
 async function emitToAdmin(io, eventName, payload) {
   io.to(ADMIN_ROOM).emit(eventName, payload);
+}
+
+// Resolve the trainee's assigned AI fitness coach for auto-response attribution,
+// falling back to any available fitness coach.
+async function resolveAssignedSpecialist(userId) {
+  const profile = await TraineeProfile.findOne({ where: { userId } });
+  const aiSpecialistId = profile?.aiSpecialistId;
+
+  let specialist = aiSpecialistId
+    ? await AiSpecialist.findOne({ where: availableFitnessCoachWhere({ specialistId: aiSpecialistId }) })
+    : null;
+
+  if (!specialist) {
+    specialist = await AiSpecialist.findOne({
+      where: availableFitnessCoachWhere(),
+      order: [["specialistId", "ASC"]]
+    });
+  }
+
+  return specialist ? specialist.toJSON() : null;
+}
+
+// Fire-and-forget: classify the issue text, surface signals to the admin, and have the
+// assigned AI Specialist auto-send a bounded, evidence-cited response to the trainee.
+// Fully failure-safe: any error leaves the original issue flow untouched.
+async function autoRespondToIssue(io, socket, issue) {
+  const result = await classifyAndAttachWorkoutIssueSignals(issue);
+  if (!result || !Array.isArray(result.signals) || result.signals.length === 0) {
+    return;
+  }
+
+  await emitToAdmin(io, "workout:issueSignals", {
+    issueId: issue.issueId,
+    workoutSessionId: issue.workoutSessionId,
+    userId: issue.userId,
+    signals: result.signals
+  });
+
+  const [top] = await buildCoachResponseSuggestions({ issue, signals: result.signals });
+  if (!top) {
+    return;
+  }
+
+  const specialist = await resolveAssignedSpecialist(issue.userId);
+  const base = {
+    issueId: issue.issueId,
+    workoutSessionId: issue.workoutSessionId,
+    userId: issue.userId,
+    workoutPlanId: issue.workoutPlanId,
+    responseType: top.responseType,
+    message: top.traineeMessage,
+    senderRole: "ai_coach",
+    specialistId: specialist?.specialistId || null,
+    specialistName: specialist?.name || "AI Coach",
+    sentAt: new Date().toISOString()
+  };
+
+  // Trainee gets the clean, actionable message only; the admin also sees the grounding.
+  io.to(traineeRoom(issue.userId)).emit("workout:coachResponse", base);
+  await emitToAdmin(io, "workout:coachResponse", {
+    ...base,
+    exercise: top.exercise || null,
+    adminRationale: top.adminRationale,
+    citations: top.citations
+  });
 }
 
 async function updateProgress(workoutSessionId) {
@@ -114,12 +184,15 @@ function shortText(value, maxLength = 180) {
 }
 
 function emitError(socket, message, details = {}) {
-  socket.emit("workout:issueReported", {
+  const payload = {
     error: true,
     message,
     details,
     reportedAt: new Date().toISOString()
-  });
+  };
+
+  socket.emit("workout:error", payload);
+  socket.emit("workout:issueReported", payload);
 }
 
 function setupSocket(server, allowedOrigins) {
@@ -324,6 +397,9 @@ function setupSocket(server, allowedOrigins) {
         if (progressPayload) {
           await emitToAdmin(io, "workout:progressUpdated", progressPayload);
         }
+
+        // Fire-and-forget signal extraction + AI Specialist auto-response. Never blocks.
+        autoRespondToIssue(io, socket, issue).catch(() => {});
       } catch (error) {
         emitError(socket, "Could not report workout issue.", { reason: error.message });
       }

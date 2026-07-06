@@ -38,6 +38,11 @@ const {
   createEstimateSnapshot,
   getEstimateSnapshot
 } = require("../services/nutritionEstimateStore");
+const { buildNutritionistContext } = require("../services/aiSpecialistContextService");
+const {
+  attachRulesToContext,
+  buildSpecialistRules
+} = require("../services/aiSpecialistRuleService");
 const asyncHandler = require("../utils/asyncHandler");
 const {
   availableNutritionistWhere,
@@ -353,14 +358,23 @@ async function evaluateFood({ userId, barcode, servingGrams, date }) {
     guidanceSource = "deterministic_quality";
   } else {
     try {
-      const specialist = await resolveNutritionSpecialist(userId);
+      const [specialist, specialistContext] = await Promise.all([
+        resolveNutritionSpecialist(userId),
+        buildNutritionistContext(userId)
+      ]);
+      const specialistData = specialist?.toJSON?.() || specialist || null;
+      const expertRules = buildSpecialistRules({
+        specialist: specialistData,
+        specialistContext
+      });
       aiGuidance = await generateNutritionGuidance({
         food,
         portionNutrition,
         currentTotals,
         projectedTotals,
         nutritionProfile: profileData,
-        specialist: specialist?.toJSON?.() || specialist || null
+        specialist: specialistData,
+        specialistContext: attachRulesToContext(specialistContext, expertRules)
       });
       aiAvailable = true;
       guidanceSource = "groq";
@@ -488,13 +502,23 @@ const getTargetSuggestion = asyncHandler(async (req, res) => {
   }
 
   try {
-    const specialist = await resolveNutritionSpecialist(userId);
+    const [specialist, specialistContext] = await Promise.all([
+      resolveNutritionSpecialist(userId),
+      buildNutritionistContext(userId)
+    ]);
+    const specialistData = specialist?.toJSON?.() || specialist || null;
+    const expertRules = buildSpecialistRules({
+      specialist: specialistData,
+      specialistContext,
+      baseline
+    });
     const aiTargets = await generateNutritionTargets({
       traineeProfile: traineeProfile.toJSON(),
       workoutPlan: workoutPlan?.toJSON?.() || workoutPlan || null,
-      specialist: specialist?.toJSON?.() || specialist || null,
+      specialist: specialistData,
       baseline,
-      nutritionContext
+      nutritionContext,
+      specialistContext: attachRulesToContext(specialistContext, expertRules)
     });
 
     return res.status(200).json(

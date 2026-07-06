@@ -6,7 +6,13 @@ require("dotenv").config({
   quiet: true
 });
 
-const { AiSpecialist, sequelize, TraineeProfile, User } = require("../models");
+const {
+  AiSpecialist,
+  AiSpecialistSignalPattern,
+  sequelize,
+  TraineeProfile,
+  User
+} = require("../models");
 
 const defaultTrainingSpecialists = [
   {
@@ -94,6 +100,7 @@ async function migrateAiCoachArchitecture() {
       allowNull: true
     }
   );
+  await AiSpecialistSignalPattern.sync();
 
   for (const specialist of defaultTrainingSpecialists) {
     await ensureTrainingSpecialist(specialist);

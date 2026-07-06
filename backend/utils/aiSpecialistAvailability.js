@@ -1,3 +1,10 @@
+const {
+  SPECIALIST_CAPABILITIES,
+  capabilityForRole,
+  isCapabilityAvailable,
+  publicCapability
+} = require("./aiSpecialistCapabilityRegistry");
+
 const AVAILABLE_FITNESS_COACH = {
   domain: "training",
   specialty: "strength training"
@@ -30,44 +37,45 @@ function matchesRole(specialist, role) {
   );
 }
 
+function capabilityForSpecialist(specialist) {
+  const plain = plainSpecialist(specialist);
+  return capabilityForRole(plain?.domain, plain?.specialty);
+}
+
 function isAvailableFitnessCoach(specialist) {
-  return isActive(specialist) && matchesRole(specialist, AVAILABLE_FITNESS_COACH);
+  const capability = capabilityForSpecialist(specialist);
+  return (
+    isActive(specialist) &&
+    isCapabilityAvailable(capability) &&
+    capability.isWorkoutAssignable === true &&
+    matchesRole(specialist, AVAILABLE_FITNESS_COACH)
+  );
 }
 
 function isAvailableNutritionist(specialist) {
-  return isActive(specialist) && matchesRole(specialist, AVAILABLE_NUTRITIONIST);
+  const capability = capabilityForSpecialist(specialist);
+  return (
+    isActive(specialist) &&
+    isCapabilityAvailable(capability) &&
+    capability.isNutritionAvailable === true &&
+    matchesRole(specialist, AVAILABLE_NUTRITIONIST)
+  );
 }
 
 function availabilityForSpecialist(specialist) {
-  if (isAvailableFitnessCoach(specialist)) {
-    return {
-      availabilityStatus: "available",
-      availabilityLabel: "Available Fitness Coach",
-      availabilityDescription: "Selectable for workout planning.",
-      productRole: "fitness_coach",
-      isWorkoutAssignable: true,
-      isNutritionAvailable: false
-    };
-  }
-
-  if (isAvailableNutritionist(specialist)) {
-    return {
-      availabilityStatus: "available",
-      availabilityLabel: "Available Nutritionist",
-      availabilityDescription: "Used for Nutrition and NutriScan guidance.",
-      productRole: "nutritionist",
-      isWorkoutAssignable: false,
-      isNutritionAvailable: true
-    };
-  }
+  const capability = capabilityForSpecialist(specialist);
+  const active = isActive(specialist);
+  const availability = publicCapability(capability);
 
   return {
-    availabilityStatus: "coming_soon",
-    availabilityLabel: "Coming soon",
-    availabilityDescription: "Future development.",
-    productRole: "future_specialist",
-    isWorkoutAssignable: false,
-    isNutritionAvailable: false
+    ...availability,
+    availabilityStatus: active ? availability.availabilityStatus : "coming_soon",
+    availabilityLabel:
+      active && isCapabilityAvailable(capability)
+        ? availability.availabilityLabel
+        : "Coming soon",
+    isWorkoutAssignable: active ? availability.isWorkoutAssignable : false,
+    isNutritionAvailable: active ? availability.isNutritionAvailable : false
   };
 }
 
@@ -100,9 +108,11 @@ function availableNutritionistWhere(extraWhere = {}) {
 module.exports = {
   AVAILABLE_FITNESS_COACH,
   AVAILABLE_NUTRITIONIST,
+  SPECIALIST_CAPABILITIES,
   availabilityForSpecialist,
   availableFitnessCoachWhere,
   availableNutritionistWhere,
+  capabilityForSpecialist,
   decorateSpecialist,
   isAvailableFitnessCoach,
   isAvailableNutritionist

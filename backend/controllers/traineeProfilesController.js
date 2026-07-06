@@ -3,6 +3,12 @@ const { successResponse } = require("../models/response");
 const asyncHandler = require("../utils/asyncHandler");
 const { isAvailableFitnessCoach } = require("../utils/aiSpecialistAvailability");
 const { parseId, validationError } = require("../utils/controllerHelpers");
+const { normalizeCoachIntake } = require("../services/coachIntakeService");
+const {
+  optionalNumber,
+  validateProfileMetrics,
+  validateProfileTextFields
+} = require("../utils/traineeProfileValidation");
 
 function stringArray(value) {
   if (Array.isArray(value)) {
@@ -12,15 +18,6 @@ function stringArray(value) {
   return [];
 }
 
-function optionalNumber(value) {
-  if (value === null || value === undefined || value === "") {
-    return null;
-  }
-
-  const parsed = Number(value);
-  return Number.isNaN(parsed) ? null : parsed;
-}
-
 function hasOwnField(body, field) {
   return Object.prototype.hasOwnProperty.call(body, field);
 }
@@ -28,9 +25,6 @@ function hasOwnField(body, field) {
 function validateProfileBody(body) {
   const details = {};
   const validBiologicalSex = ["male", "female", "prefer_not_to_say"];
-  const age = optionalNumber(body.age);
-  const weight = optionalNumber(body.weight);
-  const height = optionalNumber(body.height);
 
   if (!Number.isInteger(body.userId) || body.userId <= 0) {
     details.userId = "userId is required and must be a positive number.";
@@ -67,17 +61,7 @@ function validateProfileBody(body) {
       "biologicalSex must be male, female, or prefer_not_to_say.";
   }
 
-  if (age !== null && (!Number.isFinite(age) || age < 10 || age > 100)) {
-    details.age = "age must be between 10 and 100.";
-  }
-
-  if (weight !== null && (!Number.isFinite(weight) || weight < 30 || weight > 350)) {
-    details.weight = "weight must be between 30 and 350 kilograms.";
-  }
-
-  if (height !== null && (!Number.isFinite(height) || height < 100 || height > 250)) {
-    details.height = "height must be between 100 and 250 centimeters.";
-  }
+  Object.assign(details, validateProfileMetrics(body), validateProfileTextFields(body));
 
   return Object.keys(details).length > 0 ? details : null;
 }
@@ -125,6 +109,12 @@ async function buildProfilePayload(body, existingProfile = null) {
     return { validationDetails: resolvedSpecialist.details };
   }
 
+  const specialtyPreferences =
+    typeof body.specialtyPreferences === "object" && body.specialtyPreferences !== null
+      ? body.specialtyPreferences
+      : {};
+  const coachIntake = normalizeCoachIntake(body);
+
   return {
     payload: {
       userId: body.userId,
@@ -142,10 +132,10 @@ async function buildProfilePayload(body, existingProfile = null) {
       limitations: stringArray(body.limitations),
       likedExercises: stringArray(body.likedExercises),
       dislikedExercises: stringArray(body.dislikedExercises),
-      specialtyPreferences:
-        typeof body.specialtyPreferences === "object" && body.specialtyPreferences !== null
-          ? body.specialtyPreferences
-          : {},
+      specialtyPreferences: {
+        ...specialtyPreferences,
+        coachIntake
+      },
       freeTextNotes: typeof body.freeTextNotes === "string" ? body.freeTextNotes.trim() : ""
     }
   };
