@@ -1,4 +1,4 @@
-const { extractJson } = require("./aiService");
+const { callGroqJson, extractJson } = require("./aiService");
 const {
   createFreeTextClassifier,
   normalizeConfidenceLabel,
@@ -13,8 +13,6 @@ const {
 // consumes listSignalPatterns/disableSignalPattern from here directly, and the
 // live-workout issue classifier reuses the vocabulary pieces, so neither depends
 // on the weekly check-in feature itself.
-
-const GROQ_CHAT_COMPLETIONS_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 const ALLOWED_SIGNALS = new Set([
   "pain_signal",
@@ -214,16 +212,7 @@ function normalizeLlmClassification(raw, originalText) {
   };
 }
 
-async function classifyWeeklyCheckInWithLlm(text, { fetchImpl = fetch } = {}) {
-  if (!process.env.GROQ_API_KEY) {
-    throw new Error("GROQ_API_KEY is not configured.");
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 3500);
-  let response;
-  let data;
-
+async function classifyWeeklyCheckInWithLlm(text, { fetchImpl } = {}) {
   const prompt = `
 Classify one weekly fitness coach check-in answer.
 Use only the user's text. Do not provide training advice.
@@ -249,38 +238,21 @@ Text:
 ${JSON.stringify(text)}
 `;
 
-  try {
-    response = await fetchImpl(GROQ_CHAT_COMPLETIONS_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-        "Content-Type": "application/json"
+  const content = await callGroqJson({
+    messages: [
+      {
+        role: "system",
+        content:
+          "You classify fitness check-in text for signal extraction only and respond only with JSON."
       },
-      body: JSON.stringify({
-        model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You classify fitness check-in text for signal extraction only and respond only with JSON."
-          },
-          { role: "user", content: prompt }
-        ],
-        temperature: 0,
-        response_format: { type: "json_object" }
-      }),
-      signal: controller.signal
-    });
-    data = await response.json().catch(() => null);
-  } finally {
-    clearTimeout(timeout);
-  }
+      { role: "user", content: prompt }
+    ],
+    temperature: 0,
+    timeoutMs: 3500,
+    fetchImpl
+  });
 
-  if (!response.ok) {
-    throw new Error(data?.error?.message || `Groq request failed with status ${response.status}.`);
-  }
-
-  return normalizeLlmClassification(extractJson(data?.choices?.[0]?.message?.content), text);
+  return normalizeLlmClassification(extractJson(content), text);
 }
 
 // The generic classification/cache waterfall lives in freeTextClassificationService.

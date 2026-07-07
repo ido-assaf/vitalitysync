@@ -1,6 +1,60 @@
 const GROQ_CHAT_COMPLETIONS_URL = "https://api.groq.com/openai/v1/chat/completions";
 const NUTRITION_STATUSES = new Set(["recommended", "neutral", "caution"]);
 const ESTIMATE_CONFIDENCE = new Set(["low", "medium", "high"]);
+const DEFAULT_GROQ_TIMEOUT_MS = 15000;
+
+// Single Groq chat-completions client used by every AI call in the backend.
+// fetch is resolved at call time so tests can stub global.fetch or inject
+// fetchImpl. Every call gets an abort timeout; callers with stricter latency
+// budgets pass their own timeoutMs.
+async function callGroqJson({
+  messages,
+  model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+  temperature = 0.2,
+  maxCompletionTokens,
+  timeoutMs = DEFAULT_GROQ_TIMEOUT_MS,
+  errorLabel = "Groq",
+  fetchImpl
+}) {
+  if (!process.env.GROQ_API_KEY) {
+    throw new Error("GROQ_API_KEY is not configured.");
+  }
+
+  const doFetch = fetchImpl || fetch;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let response;
+  let data;
+
+  try {
+    response = await doFetch(GROQ_CHAT_COMPLETIONS_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature,
+        ...(maxCompletionTokens ? { max_completion_tokens: maxCompletionTokens } : {}),
+        response_format: { type: "json_object" }
+      }),
+      signal: controller.signal
+    });
+    data = await response.json().catch(() => null);
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error?.message || `${errorLabel} request failed with status ${response.status}.`
+    );
+  }
+
+  return data?.choices?.[0]?.message?.content;
+}
 
 function extractJson(text) {
   if (text && typeof text === "object" && !Array.isArray(text)) return text;
@@ -103,41 +157,20 @@ ${JSON.stringify(product)}
 }
 
 async function generateProductEvaluation({ user, product, nutritionProfile }) {
-  if (!process.env.GROQ_API_KEY) {
-    throw new Error("GROQ_API_KEY is not configured.");
-  }
-
-  const response = await fetch(GROQ_CHAT_COMPLETIONS_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You generate concise nutrition suitability evaluations and respond only with JSON."
-        },
-        {
-          role: "user",
-          content: buildPrompt({ user, product, nutritionProfile })
-        }
-      ],
-      temperature: 0.2,
-      response_format: { type: "json_object" }
-    })
+  const text = await callGroqJson({
+    messages: [
+      {
+        role: "system",
+        content:
+          "You generate concise nutrition suitability evaluations and respond only with JSON."
+      },
+      {
+        role: "user",
+        content: buildPrompt({ user, product, nutritionProfile })
+      }
+    ]
   });
 
-  const data = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    throw new Error(data?.error?.message || `Groq request failed with status ${response.status}.`);
-  }
-
-  const text = data?.choices?.[0]?.message?.content;
   return normalizeEvaluation(extractJson(text));
 }
 
@@ -365,10 +398,6 @@ async function generateMealEstimate({
   customPortion,
   cookingStyle
 }) {
-  if (!process.env.GROQ_API_KEY) {
-    throw new Error("GROQ_API_KEY is not configured.");
-  }
-
   const prompt = `
 You estimate approximate nutrition values for homemade, restaurant, or non-packaged meals.
 Return practical logging estimates, not medical, laboratory, or verified nutrition values.
@@ -386,33 +415,18 @@ Custom portion: ${JSON.stringify(customPortion || null)}
 Cooking style: ${JSON.stringify(cookingStyle)}
 `;
 
-  const response = await fetch(GROQ_CHAT_COMPLETIONS_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
-      messages: [
-        {
-          role: "system",
-          content:
-            "Estimate approximate homemade meal nutrition, include uncertainty, and return strict JSON only."
-        },
-        { role: "user", content: prompt }
-      ],
-      temperature: 0.2,
-      response_format: { type: "json_object" }
-    })
+  const content = await callGroqJson({
+    messages: [
+      {
+        role: "system",
+        content:
+          "Estimate approximate homemade meal nutrition, include uncertainty, and return strict JSON only."
+      },
+      { role: "user", content: prompt }
+    ]
   });
-  const data = await response.json().catch(() => null);
 
-  if (!response.ok) {
-    throw new Error(data?.error?.message || `Groq request failed with status ${response.status}.`);
-  }
-
-  return normalizeMealEstimate(extractJson(data?.choices?.[0]?.message?.content), {
+  return normalizeMealEstimate(extractJson(content), {
     description,
     portionSize,
     customPortion
@@ -453,42 +467,29 @@ Custom portion: ${JSON.stringify(customPortion || null)}
 Cooking style: ${JSON.stringify(cookingStyle)}
 `;
   const dataUrl = `data:${imageMimeType};base64,${imageBuffer.toString("base64")}`;
-  const response = await fetch(GROQ_CHAT_COMPLETIONS_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model:
-        process.env.GROQ_VISION_MODEL ||
-        "meta-llama/llama-4-scout-17b-16e-instruct",
-      messages: [
-        {
-          role: "system",
-          content:
-            "Estimate approximate meal nutrition from images, include uncertainty, and return strict JSON only."
-        },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: prompt },
-            { type: "image_url", image_url: { url: dataUrl } }
-          ]
-        }
-      ],
-      temperature: 0.2,
-      max_completion_tokens: 1200,
-      response_format: { type: "json_object" }
-    })
+  const content = await callGroqJson({
+    model:
+      process.env.GROQ_VISION_MODEL ||
+      "meta-llama/llama-4-scout-17b-16e-instruct",
+    messages: [
+      {
+        role: "system",
+        content:
+          "Estimate approximate meal nutrition from images, include uncertainty, and return strict JSON only."
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          { type: "image_url", image_url: { url: dataUrl } }
+        ]
+      }
+    ],
+    maxCompletionTokens: 1200,
+    errorLabel: "Groq vision"
   });
-  const data = await response.json().catch(() => null);
 
-  if (!response.ok) {
-    throw new Error(data?.error?.message || `Groq vision request failed with status ${response.status}.`);
-  }
-
-  return normalizeMealEstimate(extractJson(data?.choices?.[0]?.message?.content), {
+  return normalizeMealEstimate(extractJson(content), {
     description,
     portionSize,
     customPortion
@@ -504,10 +505,6 @@ async function generateNutritionGuidance({
   specialist,
   specialistContext
 }) {
-  if (!process.env.GROQ_API_KEY) {
-    throw new Error("GROQ_API_KEY is not configured.");
-  }
-
   const prompt = `
 You are the AI nutritionist inside VitalitySync.
 All nutrition numbers below are trusted values already calculated by the backend.
@@ -546,35 +543,18 @@ ${JSON.stringify(currentTotals)}
 Projected totals after adding:
 ${JSON.stringify(projectedTotals)}
 `;
-  const response = await fetch(GROQ_CHAT_COMPLETIONS_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You provide concise food-fit explanations using only supplied structured data and respond only with JSON."
-        },
-        { role: "user", content: prompt }
-      ],
-      temperature: 0.2,
-      response_format: { type: "json_object" }
-    })
+  const content = await callGroqJson({
+    messages: [
+      {
+        role: "system",
+        content:
+          "You provide concise food-fit explanations using only supplied structured data and respond only with JSON."
+      },
+      { role: "user", content: prompt }
+    ]
   });
-  const data = await response.json().catch(() => null);
 
-  if (!response.ok) {
-    throw new Error(data?.error?.message || `Groq request failed with status ${response.status}.`);
-  }
-
-  return normalizeNutritionGuidance(
-    extractJson(data?.choices?.[0]?.message?.content)
-  );
+  return normalizeNutritionGuidance(extractJson(content));
 }
 
 async function generateNutritionTargets({
@@ -585,10 +565,6 @@ async function generateNutritionTargets({
   nutritionContext,
   specialistContext
 }) {
-  if (!process.env.GROQ_API_KEY) {
-    throw new Error("GROQ_API_KEY is not configured.");
-  }
-
   const prompt = `
 You are the Nutritionist AI inside VitalitySync.
 Suggest editable daily calorie and protein targets using only the provided
@@ -631,49 +607,23 @@ ${JSON.stringify({
 })}
 `;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 4500);
-  let response;
-  let data;
-
-  try {
-    response = await fetch(GROQ_CHAT_COMPLETIONS_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-        "Content-Type": "application/json"
+  const content = await callGroqJson({
+    messages: [
+      {
+        role: "system",
+        content:
+          "You generate safe sports-nutrition targets from supplied structured data and respond only with JSON."
       },
-      body: JSON.stringify({
-        model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You generate safe sports-nutrition targets from supplied structured data and respond only with JSON."
-          },
-          { role: "user", content: prompt }
-        ],
-        temperature: 0.2,
-        response_format: { type: "json_object" }
-      }),
-      signal: controller.signal
-    });
-    data = await response.json().catch(() => null);
-  } finally {
-    clearTimeout(timeout);
-  }
+      { role: "user", content: prompt }
+    ],
+    timeoutMs: 4500
+  });
 
-  if (!response.ok) {
-    throw new Error(data?.error?.message || `Groq request failed with status ${response.status}.`);
-  }
-
-  return normalizeNutritionTargets(
-    extractJson(data?.choices?.[0]?.message?.content),
-    baseline
-  );
+  return normalizeNutritionTargets(extractJson(content), baseline);
 }
 
 module.exports = {
+  callGroqJson,
   generateMealEstimate,
   generateMealPhotoEstimate,
   generateNutritionGuidance,
