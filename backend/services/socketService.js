@@ -2,7 +2,6 @@ const { Server } = require("socket.io");
 const {
   Exercise,
   SetLog,
-  User,
   WorkoutIssue,
   WorkoutPlan,
   WorkoutPlanExercise,
@@ -11,6 +10,7 @@ const {
 const { classifyAndAttachWorkoutIssueSignals } = require("./workoutIssueSignalService");
 const { buildCoachResponseSuggestions } = require("./coachResponseSuggestionService");
 const { resolveFitnessCoach } = require("./specialistResolutionService");
+const { buildWorkoutSessionInclude } = require("../utils/workoutSessionInclude");
 
 const ADMIN_ROOM = "admin-monitoring";
 const TRAINEE_ROOM_PREFIX = "trainee-workout";
@@ -25,12 +25,9 @@ function plain(record) {
 
 async function getSessionPayload(workoutSessionId) {
   const session = await WorkoutSession.findByPk(workoutSessionId, {
-    include: [
-      { model: User, attributes: ["userId", "firstName", "lastName", "userRole"] },
-      { model: WorkoutPlan },
-      { model: SetLog, include: [{ model: Exercise }] },
-      { model: WorkoutIssue }
-    ]
+    include: buildWorkoutSessionInclude({
+      userAttributes: ["userId", "firstName", "lastName", "userRole"]
+    })
   });
 
   return plain(session);

@@ -43,12 +43,8 @@ const {
   buildSpecialistRules
 } = require("../services/aiSpecialistRuleService");
 const asyncHandler = require("../utils/asyncHandler");
+const { userIdFromHeader: currentUserId } = require("../utils/controllerHelpers");
 const { resolveNutritionist } = require("../services/specialistResolutionService");
-
-function currentUserId(req) {
-  const userId = Number(req.header("x-user-id"));
-  return Number.isInteger(userId) && userId > 0 ? userId : null;
-}
 
 function stringArray(value) {
   return Array.isArray(value)

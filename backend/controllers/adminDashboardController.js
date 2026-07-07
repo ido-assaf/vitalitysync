@@ -1,10 +1,7 @@
 const {
   AiSpecialist,
-  Exercise,
-  SetLog,
   TraineeProfile,
   User,
-  WorkoutIssue,
   WorkoutPlan,
   WorkoutSession
 } = require("../models");
@@ -20,19 +17,11 @@ const {
 } = require("../services/weeklyCheckInClassification");
 const { notFound, parseId, validationError } = require("../utils/controllerHelpers");
 const { workoutPlanInclude } = require("../services/workoutPlanGenerationService");
+const { buildWorkoutSessionInclude } = require("../utils/workoutSessionInclude");
 
-const sessionInclude = [
-  {
-    model: User,
-    attributes: ["userId", "firstName", "lastName", "username", "userRole"]
-  },
-  { model: WorkoutPlan },
-  {
-    model: SetLog,
-    include: [{ model: Exercise }]
-  },
-  { model: WorkoutIssue }
-];
+const sessionInclude = buildWorkoutSessionInclude({
+  userAttributes: ["userId", "firstName", "lastName", "username", "userRole"]
+});
 
 const getAiCoaches = asyncHandler(async (req, res) => {
   const specialists = await AiSpecialist.findAll({

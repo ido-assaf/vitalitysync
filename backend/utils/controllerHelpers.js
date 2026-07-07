@@ -5,6 +5,12 @@ function parseId(id) {
   return Number.isInteger(parsedId) && parsedId > 0 ? parsedId : null;
 }
 
+// Canonical parser for the x-user-id identity header (see middleware/auth.js
+// for the trust model). Returns a positive integer or null.
+function userIdFromHeader(req) {
+  return parseId(req.header("x-user-id"));
+}
+
 function plain(record) {
   return record && typeof record.toJSON === "function" ? record.toJSON() : record;
 }
@@ -21,5 +27,6 @@ module.exports = {
   notFound,
   parseId,
   plain,
+  userIdFromHeader,
   validationError
 };

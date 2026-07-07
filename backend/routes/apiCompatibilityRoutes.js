@@ -3,6 +3,7 @@ const { Op } = require("sequelize");
 const { FoodProduct, User } = require("../models");
 const { errorResponse, successResponse } = require("../models/response");
 const asyncHandler = require("../utils/asyncHandler");
+const { parseId } = require("../utils/controllerHelpers");
 
 const router = express.Router();
 
@@ -84,14 +85,32 @@ function publicUser(user) {
   return data;
 }
 
-async function getRequestedUser(req) {
-  const requestedUserId = Number(req.header("x-user-id") || req.query.userId);
+function requestedUserIdFrom(req) {
+  // A present-but-invalid header wins over the query param, matching the
+  // original `header || query` short-circuit.
+  return parseId(req.header("x-user-id") || req.query.userId);
+}
 
-  if (Number.isInteger(requestedUserId) && requestedUserId > 0) {
-    return User.findByPk(requestedUserId);
+async function getRequestedUser(req, res) {
+  const requestedUserId = requestedUserIdFrom(req);
+
+  if (!requestedUserId) {
+    res.status(400).json(
+      errorResponse("VALIDATION_ERROR", "A userId is required for this request.", {
+        userId: "Provide x-user-id or userId."
+      })
+    );
+    return null;
   }
 
-  return User.findOne({ order: [["userId", "ASC"]] });
+  const user = await User.findByPk(requestedUserId);
+
+  if (!user) {
+    res.status(404).json(errorResponse("NOT_FOUND", "No matching user exists in the database."));
+    return null;
+  }
+
+  return user;
 }
 
 router.post(
@@ -161,10 +180,10 @@ router.post("/auth/logout", (req, res) => {
 router.get(
   "/users/me",
   asyncHandler(async (req, res) => {
-    const user = await getRequestedUser(req);
+    const user = await getRequestedUser(req, res);
 
     if (!user) {
-      return res.status(404).json(errorResponse("NOT_FOUND", "No user exists in the database."));
+      return null;
     }
 
     return res.status(200).json(successResponse(publicUser(user)));
@@ -174,10 +193,10 @@ router.get(
 router.get(
   "/settings",
   asyncHandler(async (req, res) => {
-    const user = await getRequestedUser(req);
+    const user = await getRequestedUser(req, res);
 
     if (!user) {
-      return res.status(404).json(errorResponse("NOT_FOUND", "No user exists in the database."));
+      return null;
     }
 
     return res.status(200).json(
@@ -202,10 +221,10 @@ router.put(
       );
     }
 
-    const user = await getRequestedUser(req);
+    const user = await getRequestedUser(req, res);
 
     if (!user) {
-      return res.status(404).json(errorResponse("NOT_FOUND", "No user exists in the database."));
+      return null;
     }
 
     const updates = {
@@ -236,3 +255,7 @@ router.get(
 );
 
 module.exports = router;
+module.exports._internals = {
+  getRequestedUser,
+  requestedUserIdFrom
+};

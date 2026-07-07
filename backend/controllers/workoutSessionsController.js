@@ -1,33 +1,22 @@
-const {
-  Exercise,
-  SetLog,
-  User,
-  WorkoutIssue,
-  WorkoutPlan,
-  WorkoutSession
-} = require("../models");
+const { WorkoutSession } = require("../models");
 const { errorResponse, successResponse } = require("../models/response");
 const asyncHandler = require("../utils/asyncHandler");
+const { parseId, userIdFromHeader } = require("../utils/controllerHelpers");
+const { buildWorkoutSessionInclude } = require("../utils/workoutSessionInclude");
 
-const sessionInclude = [
-  {
-    model: User,
-    attributes: ["userId", "firstName", "lastName", "username", "coachId"]
-  },
-  { model: WorkoutPlan },
-  {
-    model: SetLog,
-    include: [{ model: Exercise }]
-  },
-  { model: WorkoutIssue }
-];
+const sessionInclude = buildWorkoutSessionInclude({
+  userAttributes: ["userId", "firstName", "lastName", "username", "coachId"]
+});
 
 function getRequestedUser(req) {
-  const requestedUserId = Number(req.query.userId || req.header("x-user-id"));
-  const currentUserId = Number(req.header("x-user-id"));
+  // The userId query param wins when present; otherwise the trainee's own id.
+  const requestedUserId = req.query.userId
+    ? parseId(req.query.userId)
+    : userIdFromHeader(req);
+  const currentUserId = userIdFromHeader(req);
   const isAdmin = req.header("x-user-role") === "admin";
 
-  if (!Number.isInteger(requestedUserId) || requestedUserId <= 0) {
+  if (!requestedUserId) {
     return {
       error: {
         status: 400,
@@ -88,6 +77,5 @@ const getActiveWorkoutSession = asyncHandler(async (req, res) => {
 
 module.exports = {
   getActiveWorkoutSession,
-  getWorkoutSessions,
-  sessionInclude
+  getWorkoutSessions
 };
