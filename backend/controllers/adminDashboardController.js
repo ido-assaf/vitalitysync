@@ -18,7 +18,7 @@ const {
 const {
   disableSignalPattern: disableCachedSignalPattern,
   listSignalPatterns
-} = require("../services/aiSpecialistWeeklyCheckInService");
+} = require("../services/weeklyCheckInClassification");
 const { notFound, parseId, validationError } = require("../utils/controllerHelpers");
 
 const planInclude = [

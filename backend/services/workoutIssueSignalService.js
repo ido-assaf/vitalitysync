@@ -6,7 +6,7 @@ const {
   NEUTRAL_VALID_PATTERNS,
   classifyWeeklyCheckInWithLlm,
   parseWeeklyCheckInTags
-} = require("./aiSpecialistWeeklyCheckInService");
+} = require("./weeklyCheckInClassification");
 
 // Live-workout issue reports reuse the shared classifier engine, but with a smaller
 // signal set and a separate learned-pattern cache scope: in-session issues are
