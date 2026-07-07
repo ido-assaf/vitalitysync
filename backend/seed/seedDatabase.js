@@ -8,7 +8,7 @@ const {
   setLogs,
   users,
   workoutPlans
-} = require("../models/mockData");
+} = require("./mockData");
 const {
   AiSpecialist,
   Exercise,

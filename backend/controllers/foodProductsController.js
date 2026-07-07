@@ -1,3 +1,6 @@
+// Legacy assignment CRUD surface — the React frontend only reads FoodProduct
+// via GET /api/products and the AI product-evaluation flow; this CRUD is kept
+// for the course API contract (docs/postman_collection.json); check it before deleting.
 const { FoodProduct } = require("../models");
 const createCrudController = require("../utils/resourceControllerFactory");
 

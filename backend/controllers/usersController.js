@@ -1,3 +1,6 @@
+// Legacy assignment CRUD surface — not called by the React frontend (auth and
+// settings flow through /api in routes/apiCompatibilityRoutes.js). Kept for the
+// course API contract (docs/postman_collection.json); check it before deleting.
 const { User } = require("../models");
 const asyncHandler = require("../utils/asyncHandler");
 const { notFound, parseId, validationError } = require("../utils/controllerHelpers");

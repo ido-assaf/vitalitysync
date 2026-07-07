@@ -1,3 +1,6 @@
+// Legacy assignment CRUD surface — not called by the React frontend (live set
+// logging flows through Socket.IO in services/socketService.js). Kept for the
+// course API contract (docs/postman_collection.json); check it before deleting.
 const { SetLog } = require("../models");
 const createCrudController = require("../utils/resourceControllerFactory");
 

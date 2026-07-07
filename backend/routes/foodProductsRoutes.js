@@ -1,3 +1,5 @@
+// Legacy assignment CRUD surface — not called by the React frontend. Kept for
+// the course API contract (docs/postman_collection.json); check it before deleting.
 const express = require("express");
 const foodProductsController = require("../controllers/foodProductsController");
 const { authorizeRoles } = require("../middleware/auth");
