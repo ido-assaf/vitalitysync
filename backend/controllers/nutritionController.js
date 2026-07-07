@@ -9,7 +9,6 @@ const { errorResponse, successResponse } = require("../models/response");
 const {
   generateMealEstimate,
   generateMealPhotoEstimate,
-  generateNutritionGuidance,
   generateNutritionTargets
 } = require("../services/aiService");
 const {
@@ -17,19 +16,20 @@ const {
   searchFoods
 } = require("../services/openFoodFactsService");
 const {
-  addNutrition,
-  applySafetyRules,
   buildDailyInsight,
-  buildFoodQualityAssessment,
-  buildPortionGuidance,
   buildTargetSuggestion,
-  calculatePortionNutrition,
-  findAllergenMatches,
   sumNutrition
 } = require("../services/nutritionService");
 const {
+  configuredProfile,
+  dailyLogFingerprint,
+  evaluateFood,
+  getProfile,
+  getTodayItems,
+  profileVersion
+} = require("../services/nutritionEvaluationService");
+const {
   consumeEvaluationSnapshot,
-  createEvaluationSnapshot,
   getEvaluationSnapshot
 } = require("../services/nutritionEvaluationStore");
 const {
@@ -230,188 +230,6 @@ function validateReviewedNutrition(value) {
   return Object.keys(details).length ? { details, normalized: null } : { details: null, normalized };
 }
 
-function dailyLogFingerprint(items) {
-  return (Array.isArray(items) ? items : [])
-    .map((item) => `${item.nutritionLogItemId}:${item.updateDate || item.createDate || ""}`)
-    .sort()
-    .join("|");
-}
-
-function profileVersion(profile) {
-  return profile?.updateDate ? new Date(profile.updateDate).toISOString() : "";
-}
-
-async function getProfile(userId) {
-  return NutritionProfile.findOne({
-    where: { userId },
-    order: [["updateDate", "DESC"], ["nutritionProfileId", "DESC"]]
-  });
-}
-
-async function getTodayItems(userId, date) {
-  return NutritionLogItem.findAll({
-    where: { userId, consumedDate: date },
-    order: [["createDate", "DESC"]]
-  });
-}
-
-function configuredProfile(profile) {
-  return Boolean(
-    profile &&
-      Number(profile.dailyCaloriesTarget) > 0 &&
-      Number(profile.dailyProteinTarget) > 0
-  );
-}
-
-function fallbackGuidance({ portionNutrition, nutritionProfile, projectedTotals }) {
-  if (projectedTotals.calories > Number(nutritionProfile.dailyCaloriesTarget)) {
-    return {
-      status: "caution",
-      explanation: "This portion would take you above today’s calorie target.",
-      practicalSuggestion: "Choose a smaller portion or balance it with lighter foods later."
-    };
-  }
-
-  if (portionNutrition.protein >= 10) {
-    return {
-      status: "recommended",
-      explanation: "This portion contributes meaningful protein while remaining within today’s calorie target.",
-      practicalSuggestion: "Use it as part of a balanced meal and keep tracking the rest of the day."
-    };
-  }
-
-  return {
-    status: "neutral",
-    explanation: "This portion can fit today based on your current calorie total.",
-    practicalSuggestion: "Balance it with a protein-rich food if your protein target is still low."
-  };
-}
-
-async function evaluateFood({ userId, barcode, servingGrams, date }) {
-  const [profile, food, items] = await Promise.all([
-    getProfile(userId),
-    getFoodByBarcode(barcode),
-    getTodayItems(userId, date)
-  ]);
-
-  if (!configuredProfile(profile)) {
-    const error = new Error("Complete your nutrition profile before evaluating food.");
-    error.code = "PROFILE_REQUIRED";
-    throw error;
-  }
-
-  if (!food) {
-    const error = new Error("The selected Open Food Facts product was not found.");
-    error.code = "FOOD_NOT_FOUND";
-    throw error;
-  }
-
-  if (!food.nutritionComplete) {
-    const error = new Error("This product does not have complete calories and macro data.");
-    error.code = "INCOMPLETE_NUTRITION";
-    error.food = food;
-    throw error;
-  }
-
-  const currentTotals = sumNutrition(items);
-  const portionNutrition = calculatePortionNutrition(food, servingGrams);
-  const projectedTotals = addNutrition(currentTotals, portionNutrition);
-  const profileData = profile.toJSON();
-  const allergenMatches = findAllergenMatches(profileData.allergies, food.allergens);
-  const qualityAssessment = buildFoodQualityAssessment({
-    food,
-    nutritionProfile: profileData,
-    currentTotals,
-    portionNutrition,
-    projectedTotals,
-    servingGrams
-  });
-  let aiGuidance = null;
-  let aiAvailable = false;
-  let guidanceSource = "deterministic";
-
-  if (allergenMatches.length > 0) {
-    guidanceSource = "safety_override";
-  } else if (qualityAssessment.shouldSkipAi && qualityAssessment.guidance) {
-    aiGuidance = qualityAssessment.guidance;
-    guidanceSource = "deterministic_quality";
-  } else {
-    try {
-      const [specialist, specialistContext] = await Promise.all([
-        resolveNutritionist(userId),
-        buildNutritionistContext(userId)
-      ]);
-      const specialistData = specialist?.toJSON?.() || specialist || null;
-      const expertRules = buildSpecialistRules({
-        specialist: specialistData,
-        specialistContext
-      });
-      aiGuidance = await generateNutritionGuidance({
-        food,
-        portionNutrition,
-        currentTotals,
-        projectedTotals,
-        nutritionProfile: profileData,
-        specialist: specialistData,
-        specialistContext: attachRulesToContext(specialistContext, expertRules)
-      });
-      aiAvailable = true;
-      guidanceSource = "groq";
-    } catch (error) {
-      aiGuidance = fallbackGuidance({
-        portionNutrition,
-        nutritionProfile: profileData,
-        projectedTotals
-      });
-    }
-  }
-
-  const evaluation = {
-    food,
-    servingGrams: Number(servingGrams),
-    portionNutrition,
-    currentTotals,
-    projectedTotals,
-    targets: {
-      calories: Number(profile.dailyCaloriesTarget),
-      protein: Number(profile.dailyProteinTarget)
-    },
-    portionGuidance: buildPortionGuidance({
-      food,
-      nutritionProfile: profileData,
-      currentTotals,
-      portionNutrition,
-      projectedTotals,
-      servingGrams
-    }),
-    ...applySafetyRules({
-      aiGuidance,
-      food,
-      nutritionProfile: profileData,
-      projectedTotals,
-      qualityAssessment
-    }),
-    aiAvailable,
-    guidanceSource,
-    disclaimer: "General nutrition guidance only; not medical advice."
-  };
-
-  const snapshot = createEvaluationSnapshot({
-    userId,
-    barcode: String(barcode),
-    date,
-    servingGrams: Number(servingGrams),
-    profileVersion: profileVersion(profile),
-    dailyLogFingerprint: dailyLogFingerprint(items),
-    evaluation
-  });
-
-  return {
-    ...evaluation,
-    ...snapshot
-  };
-}
-
 const getOwnProfile = asyncHandler(async (req, res) => {
   const userId = currentUserId(req);
 
@@ -527,6 +345,10 @@ const getTargetSuggestion = asyncHandler(async (req, res) => {
   }
 });
 
+// This is the write path the live nutrition flow depends on: it enforces
+// calorie/protein target bounds and maintains the structuredProfile mirror.
+// The legacy /nutrition-profiles CRUD (nutritionProfilesController) writes the
+// same table with a different, assignment-era payload contract.
 const upsertOwnProfile = asyncHandler(async (req, res) => {
   const userId = currentUserId(req);
   const validationDetails = validateProfileBody(req.body);
@@ -723,72 +545,62 @@ const estimateMeal = asyncHandler(async (req, res) => {
   }
 });
 
-const addLogItem = asyncHandler(async (req, res) => {
-  const userId = currentUserId(req);
-  const evaluationId = String(req.body.evaluationId || "").trim();
-  const estimateId = String(req.body.estimateId || "").trim();
+async function addLogItemFromEstimate(req, res, userId, estimateId) {
+  const snapshot = getEstimateSnapshot(estimateId);
+  if (!snapshot) {
+    return res.status(409).json(
+      errorResponse("ESTIMATE_EXPIRED", "This meal estimate expired. Estimate it again.")
+    );
+  }
+  if (snapshot.userId !== userId) {
+    return res.status(403).json(errorResponse("FORBIDDEN", "This estimate belongs to another user."));
+  }
+  if (!validDate(req.body.date)) {
+    return res.status(400).json(errorResponse("VALIDATION_ERROR", "Date must use YYYY-MM-DD."));
+  }
 
-  if (!userId || (!evaluationId && !estimateId) || (evaluationId && estimateId)) {
+  const reviewed = validateReviewedNutrition(req.body.reviewedNutrition);
+  if (reviewed.details) {
     return res.status(400).json(
-      errorResponse("VALIDATION_ERROR", "Provide one valid evaluationId or estimateId.")
+      errorResponse("VALIDATION_ERROR", "Reviewed nutrition is invalid.", reviewed.details)
     );
   }
 
-  if (estimateId) {
-    const snapshot = getEstimateSnapshot(estimateId);
-    if (!snapshot) {
-      return res.status(409).json(
-        errorResponse("ESTIMATE_EXPIRED", "This meal estimate expired. Estimate it again.")
-      );
-    }
-    if (snapshot.userId !== userId) {
-      return res.status(403).json(errorResponse("FORBIDDEN", "This estimate belongs to another user."));
-    }
-    if (!validDate(req.body.date)) {
-      return res.status(400).json(errorResponse("VALIDATION_ERROR", "Date must use YYYY-MM-DD."));
-    }
+  const estimate = snapshot.estimate;
+  const item = await NutritionLogItem.create({
+    userId,
+    consumedDate: req.body.date,
+    foodName: estimate.mealName,
+    brand: snapshot.estimateType === "photo" ? "AI visual estimate" : "Homemade",
+    imageUrl: null,
+    source: "ai_estimate",
+    externalFoodId: estimateId,
+    servingGrams: null,
+    portionDescription: estimate.portionDescription,
+    originalDescription: snapshot.originalDescription,
+    estimateConfidence: estimate.confidence,
+    estimateAssumptions: estimate.assumptions,
+    ...reviewed.normalized,
+    allergens: [],
+    evaluationStatus: "estimated",
+    evaluationReason:
+      snapshot.estimateType === "photo"
+        ? `Estimated from meal photo, optional description, and portion size. Values are approximate and may vary by hidden ingredients, oil, sauce, and actual serving size. ${estimate.explanation}`
+        : estimate.explanation,
+    practicalSuggestion:
+      estimate.warnings.join(" ") ||
+      (snapshot.estimateType === "photo"
+        ? "Estimated from a meal photo and portion size. Values may vary by hidden ingredients, oil, sauce, and actual serving size."
+        : "Values are approximate and can vary by recipe and serving size."),
+    guidanceSource:
+      snapshot.estimateType === "photo" ? "ai_photo_estimate" : "ai_estimate"
+  });
 
-    const reviewed = validateReviewedNutrition(req.body.reviewedNutrition);
-    if (reviewed.details) {
-      return res.status(400).json(
-        errorResponse("VALIDATION_ERROR", "Reviewed nutrition is invalid.", reviewed.details)
-      );
-    }
+  consumeEstimateSnapshot(estimateId);
+  return res.status(201).json(successResponse(item));
+}
 
-    const estimate = snapshot.estimate;
-    const item = await NutritionLogItem.create({
-      userId,
-      consumedDate: req.body.date,
-      foodName: estimate.mealName,
-      brand: snapshot.estimateType === "photo" ? "AI visual estimate" : "Homemade",
-      imageUrl: null,
-      source: "ai_estimate",
-      externalFoodId: estimateId,
-      servingGrams: null,
-      portionDescription: estimate.portionDescription,
-      originalDescription: snapshot.originalDescription,
-      estimateConfidence: estimate.confidence,
-      estimateAssumptions: estimate.assumptions,
-      ...reviewed.normalized,
-      allergens: [],
-      evaluationStatus: "estimated",
-      evaluationReason:
-        snapshot.estimateType === "photo"
-          ? `Estimated from meal photo, optional description, and portion size. Values are approximate and may vary by hidden ingredients, oil, sauce, and actual serving size. ${estimate.explanation}`
-          : estimate.explanation,
-      practicalSuggestion:
-        estimate.warnings.join(" ") ||
-        (snapshot.estimateType === "photo"
-          ? "Estimated from a meal photo and portion size. Values may vary by hidden ingredients, oil, sauce, and actual serving size."
-          : "Values are approximate and can vary by recipe and serving size."),
-      guidanceSource:
-        snapshot.estimateType === "photo" ? "ai_photo_estimate" : "ai_estimate"
-    });
-
-    consumeEstimateSnapshot(estimateId);
-    return res.status(201).json(successResponse(item));
-  }
-
+async function addLogItemFromEvaluation(req, res, userId, evaluationId) {
   const snapshot = getEvaluationSnapshot(evaluationId);
 
   if (!snapshot) {
@@ -841,6 +653,24 @@ const addLogItem = asyncHandler(async (req, res) => {
 
   consumeEvaluationSnapshot(evaluationId);
   return res.status(201).json(successResponse(item));
+}
+
+const addLogItem = asyncHandler(async (req, res) => {
+  const userId = currentUserId(req);
+  const evaluationId = String(req.body.evaluationId || "").trim();
+  const estimateId = String(req.body.estimateId || "").trim();
+
+  if (!userId || (!evaluationId && !estimateId) || (evaluationId && estimateId)) {
+    return res.status(400).json(
+      errorResponse("VALIDATION_ERROR", "Provide one valid evaluationId or estimateId.")
+    );
+  }
+
+  if (estimateId) {
+    return addLogItemFromEstimate(req, res, userId, estimateId);
+  }
+
+  return addLogItemFromEvaluation(req, res, userId, evaluationId);
 });
 
 const getRecentFoods = asyncHandler(async (req, res) => {

@@ -1,3 +1,7 @@
+// Legacy assignment CRUD surface for NutritionProfile with its own payload
+// contract (requires freeTextNeeds/structuredProfile, no calorie targets). The
+// live nutrition flow writes this table through /nutrition/profile
+// (nutritionController.upsertOwnProfile), which enforces target bounds.
 const { NutritionProfile } = require("../models");
 const createCrudController = require("../utils/resourceControllerFactory");
 
