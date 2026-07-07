@@ -1,9 +1,7 @@
 const { Server } = require("socket.io");
 const {
-  AiSpecialist,
   Exercise,
   SetLog,
-  TraineeProfile,
   User,
   WorkoutIssue,
   WorkoutPlan,
@@ -12,7 +10,7 @@ const {
 } = require("../models");
 const { classifyAndAttachWorkoutIssueSignals } = require("./workoutIssueSignalService");
 const { buildCoachResponseSuggestions } = require("./coachResponseSuggestionService");
-const { availableFitnessCoachWhere } = require("../utils/aiSpecialistAvailability");
+const { resolveFitnessCoach } = require("./specialistResolutionService");
 
 const ADMIN_ROOM = "admin-monitoring";
 const TRAINEE_ROOM_PREFIX = "trainee-workout";
@@ -45,20 +43,7 @@ async function emitToAdmin(io, eventName, payload) {
 // Resolve the trainee's assigned AI fitness coach for auto-response attribution,
 // falling back to any available fitness coach.
 async function resolveAssignedSpecialist(userId) {
-  const profile = await TraineeProfile.findOne({ where: { userId } });
-  const aiSpecialistId = profile?.aiSpecialistId;
-
-  let specialist = aiSpecialistId
-    ? await AiSpecialist.findOne({ where: availableFitnessCoachWhere({ specialistId: aiSpecialistId }) })
-    : null;
-
-  if (!specialist) {
-    specialist = await AiSpecialist.findOne({
-      where: availableFitnessCoachWhere(),
-      order: [["specialistId", "ASC"]]
-    });
-  }
-
+  const specialist = await resolveFitnessCoach({ userId });
   return specialist ? specialist.toJSON() : null;
 }
 

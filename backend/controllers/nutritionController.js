@@ -1,5 +1,4 @@
 const {
-  AiSpecialist,
   NutritionFavorite,
   NutritionLogItem,
   NutritionProfile,
@@ -44,10 +43,7 @@ const {
   buildSpecialistRules
 } = require("../services/aiSpecialistRuleService");
 const asyncHandler = require("../utils/asyncHandler");
-const {
-  availableNutritionistWhere,
-  isAvailableNutritionist
-} = require("../utils/aiSpecialistAvailability");
+const { resolveNutritionist } = require("../services/specialistResolutionService");
 
 function currentUserId(req) {
   const userId = Number(req.header("x-user-id"));
@@ -267,23 +263,6 @@ function configuredProfile(profile) {
   );
 }
 
-async function resolveNutritionSpecialist(userId) {
-  const traineeProfile = await TraineeProfile.findOne({
-    where: { userId },
-    include: [{ model: AiSpecialist }]
-  });
-  const assigned = traineeProfile?.AiSpecialist;
-
-  if (isAvailableNutritionist(assigned)) {
-    return assigned;
-  }
-
-  return AiSpecialist.findOne({
-    where: availableNutritionistWhere(),
-    order: [["specialistId", "ASC"]]
-  });
-}
-
 function fallbackGuidance({ portionNutrition, nutritionProfile, projectedTotals }) {
   if (projectedTotals.calories > Number(nutritionProfile.dailyCaloriesTarget)) {
     return {
@@ -359,7 +338,7 @@ async function evaluateFood({ userId, barcode, servingGrams, date }) {
   } else {
     try {
       const [specialist, specialistContext] = await Promise.all([
-        resolveNutritionSpecialist(userId),
+        resolveNutritionist(userId),
         buildNutritionistContext(userId)
       ]);
       const specialistData = specialist?.toJSON?.() || specialist || null;
@@ -503,7 +482,7 @@ const getTargetSuggestion = asyncHandler(async (req, res) => {
 
   try {
     const [specialist, specialistContext] = await Promise.all([
-      resolveNutritionSpecialist(userId),
+      resolveNutritionist(userId),
       buildNutritionistContext(userId)
     ]);
     const specialistData = specialist?.toJSON?.() || specialist || null;
@@ -1065,6 +1044,6 @@ module.exports = {
   validateMealEstimateBody,
   validateReviewedNutrition,
   _internals: {
-    resolveNutritionSpecialist
+    resolveNutritionSpecialist: resolveNutritionist
   }
 };

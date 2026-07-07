@@ -1,6 +1,5 @@
 const { Op } = require("sequelize");
 const {
-  AiSpecialist,
   Exercise,
   TraineeProfile,
   WorkoutPlan,
@@ -8,7 +7,7 @@ const {
 } = require("../models");
 const { errorResponse, successResponse } = require("../models/response");
 const asyncHandler = require("../utils/asyncHandler");
-const { availableFitnessCoachWhere } = require("../utils/aiSpecialistAvailability");
+const { resolveFitnessCoach } = require("../services/specialistResolutionService");
 const createCrudController = require("../utils/resourceControllerFactory");
 const { validateProfileReadyForPlan } = require("../utils/traineeProfileValidation");
 const { buildFitnessCoachContext } = require("../services/aiSpecialistContextService");
@@ -1187,19 +1186,7 @@ async function upsertSuggestedWorkoutPlanForUser(userId) {
     return null;
   }
 
-  let aiCoach = profile.aiSpecialistId
-    ? await AiSpecialist.findOne({
-        where: availableFitnessCoachWhere({
-          specialistId: profile.aiSpecialistId
-        })
-      })
-    : null;
-  if (!aiCoach) {
-    aiCoach = await AiSpecialist.findOne({
-      where: availableFitnessCoachWhere(),
-      order: [["specialistId", "ASC"]]
-    });
-  }
+  const aiCoach = await resolveFitnessCoach({ userId, profile });
   const generationContext = aiCoach
     ? { ...aiCoach.toJSON(), coachSpecialty: aiCoach.specialty }
     : null;
@@ -1395,19 +1382,7 @@ function buildWeeklyReviewPreview(weeklyReview) {
 }
 
 async function buildWeeklyFitnessReviewForUser(userId, profile, options = {}) {
-  let aiCoach = profile.aiSpecialistId
-    ? await AiSpecialist.findOne({
-        where: availableFitnessCoachWhere({
-          specialistId: profile.aiSpecialistId
-        })
-      })
-    : null;
-  if (!aiCoach) {
-    aiCoach = await AiSpecialist.findOne({
-      where: availableFitnessCoachWhere(),
-      order: [["specialistId", "ASC"]]
-    });
-  }
+  const aiCoach = await resolveFitnessCoach({ userId, profile });
 
   const specialistContext = await buildFitnessCoachContext(userId);
   const expertRules = buildSpecialistRules({
