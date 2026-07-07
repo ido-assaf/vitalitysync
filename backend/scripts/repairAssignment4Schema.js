@@ -7,7 +7,7 @@ require("dotenv").config({
 });
 
 const { sequelize, User } = require("../models");
-const { backfillEmptySuggestedPlans } = require("../controllers/workoutPlansController");
+const { backfillEmptySuggestedPlans } = require("../services/workoutPlanGenerationService");
 const { seedCuratedExercises } = require("../seed/curatedExercises");
 
 const USER_TABLE = "User";

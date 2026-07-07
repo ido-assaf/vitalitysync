@@ -6,7 +6,6 @@ const {
   User,
   WorkoutIssue,
   WorkoutPlan,
-  WorkoutPlanExercise,
   WorkoutSession
 } = require("../models");
 const { successResponse } = require("../models/response");
@@ -20,13 +19,7 @@ const {
   listSignalPatterns
 } = require("../services/weeklyCheckInClassification");
 const { notFound, parseId, validationError } = require("../utils/controllerHelpers");
-
-const planInclude = [
-  {
-    model: WorkoutPlanExercise,
-    include: [{ model: Exercise }]
-  }
-];
+const { workoutPlanInclude } = require("../services/workoutPlanGenerationService");
 
 const sessionInclude = [
   {
@@ -168,7 +161,7 @@ const getTraineeDetails = asyncHandler(async (req, res) => {
       },
       {
         model: WorkoutPlan,
-        include: planInclude
+        include: workoutPlanInclude
       }
     ]
   });
