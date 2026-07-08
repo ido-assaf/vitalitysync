@@ -1,4 +1,5 @@
 const { withEvidence } = require("./aiSpecialistProfessionalRulePackService");
+const { REASON_CODES } = require("../constants/aiSpecialistReasonCodes");
 
 const LOAD_PRESCRIPTION_VERSION = "fitness_load_prescription_v0.1";
 
@@ -50,10 +51,10 @@ function recommendationForExercise({ exerciseProgress, adaptationDecisions = {},
   const exposures = Number(exerciseProgress.exposures || 0);
   const goal = profileGoal(profile);
 
-  if (hasAny(reasonCodes, ["recurring_pain", "pain_signal", "recurring_check_in_pain"])) {
+  if (hasAny(reasonCodes, [REASON_CODES.RECURRING_PAIN, REASON_CODES.PAIN_SIGNAL, REASON_CODES.RECURRING_CHECK_IN_PAIN])) {
     return withEvidence(
       {
-        ...baseRecommendation(exerciseProgress, [...reasonCodes, "pain_blocks_progression"]),
+        ...baseRecommendation(exerciseProgress, [...reasonCodes, REASON_CODES.PAIN_BLOCKS_PROGRESSION]),
         decision: "pause_progression",
         strategy: "review_pain_before_load_change",
         recommendation: "Pause load progression and review the painful pattern before changing load."
@@ -62,10 +63,17 @@ function recommendationForExercise({ exerciseProgress, adaptationDecisions = {},
     );
   }
 
-  if (hasAny(reasonCodes, ["recovery_risk", "fatigue_signal", "repeated_fatigue_signal", "too_hard"])) {
+  if (
+    hasAny(reasonCodes, [
+      REASON_CODES.RECOVERY_RISK,
+      REASON_CODES.FATIGUE_SIGNAL,
+      REASON_CODES.REPEATED_FATIGUE_SIGNAL,
+      REASON_CODES.TOO_HARD
+    ])
+  ) {
     return withEvidence(
       {
-        ...baseRecommendation(exerciseProgress, [...reasonCodes, "recovery_blocks_progression"]),
+        ...baseRecommendation(exerciseProgress, [...reasonCodes, REASON_CODES.RECOVERY_BLOCKS_PROGRESSION]),
         decision: "reduce_load_or_volume_preview",
         strategy: "reduce_training_stress",
         recommendation: "Use a conservative reduction in load, volume, or difficulty before progressing."
@@ -77,7 +85,7 @@ function recommendationForExercise({ exerciseProgress, adaptationDecisions = {},
   if (trend === "declining") {
     return withEvidence(
       {
-        ...baseRecommendation(exerciseProgress, [...reasonCodes, "declining_performance"]),
+        ...baseRecommendation(exerciseProgress, [...reasonCodes, REASON_CODES.DECLINING_PERFORMANCE]),
         decision: "reduce_load_or_volume_preview",
         strategy: "reduce_training_stress",
         recommendation: "Do not increase load while recent performance is declining."
@@ -89,7 +97,7 @@ function recommendationForExercise({ exerciseProgress, adaptationDecisions = {},
   if (exposures < 3 || trend === "insufficient_data") {
     return withEvidence(
       {
-        ...baseRecommendation(exerciseProgress, [...reasonCodes, "insufficient_exercise_history"]),
+        ...baseRecommendation(exerciseProgress, [...reasonCodes, REASON_CODES.INSUFFICIENT_EXERCISE_HISTORY]),
         decision: "collect_more_data",
         strategy: "repeat_and_log",
         recommendation: "Keep logging sets, reps, load, and completion before changing the prescription."
@@ -102,7 +110,7 @@ function recommendationForExercise({ exerciseProgress, adaptationDecisions = {},
   if (trend === "plateau") {
     return withEvidence(
       {
-        ...baseRecommendation(exerciseProgress, [...reasonCodes, "plateau_3_plus_exposures"]),
+        ...baseRecommendation(exerciseProgress, [...reasonCodes, REASON_CODES.PLATEAU_3_PLUS_EXPOSURES]),
         decision: "keep_load",
         strategy: "review_reps_setup_or_recovery",
         recommendation: "Keep load stable and review reps, setup, technique, or recovery before a larger change."
@@ -114,7 +122,11 @@ function recommendationForExercise({ exerciseProgress, adaptationDecisions = {},
   if (trend === "progressing" && goal === "strength") {
     return withEvidence(
       {
-        ...baseRecommendation(exerciseProgress, [...reasonCodes, "progressing_no_pain", "strength_goal"]),
+        ...baseRecommendation(exerciseProgress, [
+          ...reasonCodes,
+          REASON_CODES.PROGRESSING_NO_PAIN,
+          REASON_CODES.STRENGTH_GOAL
+        ]),
         decision: "increase_load_preview",
         strategy: "small_load_increase_when_completed",
         recommendation: "Consider a small load increase only after the current prescription is completed cleanly."
@@ -126,7 +138,7 @@ function recommendationForExercise({ exerciseProgress, adaptationDecisions = {},
   if (trend === "progressing") {
     return withEvidence(
       {
-        ...baseRecommendation(exerciseProgress, [...reasonCodes, "progressing_no_pain"]),
+        ...baseRecommendation(exerciseProgress, [...reasonCodes, REASON_CODES.PROGRESSING_NO_PAIN]),
         decision: "add_reps_first",
         strategy: "add_reps_before_load",
         recommendation: "Prefer adding reps first or a small load increase only if completion stays stable."
@@ -137,7 +149,7 @@ function recommendationForExercise({ exerciseProgress, adaptationDecisions = {},
 
   return withEvidence(
     {
-      ...baseRecommendation(exerciseProgress, [...reasonCodes, "no_clear_load_change"]),
+      ...baseRecommendation(exerciseProgress, [...reasonCodes, REASON_CODES.NO_CLEAR_LOAD_CHANGE]),
       decision: "keep_load",
       strategy: "maintain_current_prescription",
       recommendation: "Keep load stable until the trend becomes clearer."

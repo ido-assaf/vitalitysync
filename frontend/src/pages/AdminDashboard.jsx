@@ -29,6 +29,14 @@ const emptyForm = {
   isActive: true
 };
 
+const ISSUE_SIGNAL_LABELS = {
+  pain_signal: "Pain",
+  fatigue_signal: "Fatigue",
+  equipment_unavailable: "Equipment",
+  too_hard: "Too hard",
+  too_easy: "Too easy"
+};
+
 function suggestCoachResponse(issueMessage) {
   const message = String(issueMessage || "").toLowerCase();
 
@@ -467,9 +475,28 @@ function AdminDashboard() {
     socket.on("workout:issueReported", (issue) =>
       addEvent("workout:issueReported", issue)
     );
-    socket.on("workout:coachResponse", (response) =>
-      addEvent("workout:coachResponse", response)
-    );
+    socket.on("workout:coachResponse", (response) => {
+      if (response?.senderRole === "ai_coach") {
+        setEvents((current) =>
+          current.map((event) =>
+            event.type === "workout:issueReported" && event.payload?.issueId === response.issueId
+              ? { ...event, payload: { ...event.payload, autoResponse: response } }
+              : event
+          )
+        );
+        return;
+      }
+      addEvent("workout:coachResponse", response);
+    });
+    socket.on("workout:issueSignals", ({ issueId, signals } = {}) => {
+      setEvents((current) =>
+        current.map((event) =>
+          event.type === "workout:issueReported" && event.payload?.issueId === issueId
+            ? { ...event, payload: { ...event.payload, signals } }
+            : event
+        )
+      );
+    });
     socket.on("workout:finished", (session) => {
       upsertSession(session);
       setWorkoutHistory((current) => [
@@ -1160,6 +1187,37 @@ function AdminDashboard() {
                             <time>{new Date(event.receivedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
                             {isIssue ? (
                               <div className="admin-issue-response">
+                                {Array.isArray(event.payload?.signals) && event.payload.signals.length > 0 ? (
+                                  <div className="admin-issue-signals">
+                                    {event.payload.signals.map((signal) => (
+                                      <span key={signal} className="admin-issue-signal">
+                                        {ISSUE_SIGNAL_LABELS[signal] || signal}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null}
+                                {event.payload?.autoResponse ? (
+                                  <div className="admin-issue-autoresponse">
+                                    <small>
+                                      {event.payload.autoResponse.specialistName || "AI Coach"} · auto-sent
+                                    </small>
+                                    <p>{event.payload.autoResponse.message}</p>
+                                    {event.payload.autoResponse.adminRationale ? (
+                                      <em>{event.payload.autoResponse.adminRationale}</em>
+                                    ) : null}
+                                    {Array.isArray(event.payload.autoResponse.citations) &&
+                                    event.payload.autoResponse.citations.length > 0 ? (
+                                      <ul className="admin-issue-citations">
+                                        {event.payload.autoResponse.citations.map((citation) => (
+                                          <li key={citation.id}>
+                                            {citation.sourceLabel || citation.id}
+                                            {citation.evidenceLevel ? ` · ${citation.evidenceLevel}` : ""}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    ) : null}
+                                  </div>
+                                ) : null}
                                 {responseSent ? (
                                   <span>
                                     Response sent: {event.payload.coachResponseMessage}

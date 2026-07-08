@@ -357,6 +357,26 @@ export function suggestWorkoutPlan(userId) {
   });
 }
 
+export function getWeeklyFitnessReview(userId) {
+  return request({
+    method: "POST",
+    url: "/workout-plans/weekly-review",
+    data: { userId }
+  });
+}
+
+export function sendWeeklyFitnessCheckIn(userId, answersOrPayload, extraPayload = {}) {
+  const payload = Array.isArray(answersOrPayload)
+    ? { answers: answersOrPayload, ...extraPayload }
+    : { ...(answersOrPayload || {}) };
+
+  return request({
+    method: "POST",
+    url: "/workout-plans/weekly-review/check-in",
+    data: { userId, ...payload }
+  });
+}
+
 export function getProductEvaluations() {
   return request({
     method: "GET",

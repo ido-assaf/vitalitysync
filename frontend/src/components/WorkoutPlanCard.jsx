@@ -185,6 +185,8 @@ function WorkoutPlanCard({
                         day === activeDay ? "plan-day-tab--active" : ""
                       } ${isCompleted ? "plan-day-tab--complete" : ""}`}
                       onClick={() => handleDaySelect(day)}
+                      aria-pressed={day === activeDay}
+                      aria-current={day === activeDay ? "true" : undefined}
                     >
                       <strong>{day}</strong>
                       <span>{isCompleted ? "✓ Done" : day === activeDay ? "Selected" : "Workout"}</span>

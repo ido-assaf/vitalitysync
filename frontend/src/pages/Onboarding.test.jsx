@@ -58,6 +58,12 @@ function renderOnboarding() {
   );
 }
 
+function fillRequiredBodyContext() {
+  fireEvent.change(screen.getByLabelText("Age"), { target: { value: "30" } });
+  fireEvent.change(screen.getByLabelText("Weight (kg)"), { target: { value: "82" } });
+  fireEvent.change(screen.getByLabelText("Height (cm)"), { target: { value: "180" } });
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   getStoredUser.mockReturnValue({ userId: 3, userRole: "trainee" });
@@ -97,6 +103,7 @@ test("saves the selected Fitness Coach id with the trainee profile", async () =>
   await screen.findByRole("button", {
     name: /Available Fitness Coach Strength Training AI Coach Selected for workout planning/i
   });
+  fillRequiredBodyContext();
   fireEvent.click(screen.getByRole("button", { name: /Save Profile and Refresh Plan/i }));
 
   await waitFor(() => {
@@ -104,6 +111,9 @@ test("saves the selected Fitness Coach id with the trainee profile", async () =>
       expect.objectContaining({
         userId: 3,
         aiSpecialistId: 1,
+        age: 30,
+        weight: 82,
+        height: 180,
         specialtyPreferences: expect.objectContaining({
           aiCoachSpecialty: "strength training"
         })
@@ -111,4 +121,38 @@ test("saves the selected Fitness Coach id with the trainee profile", async () =>
     );
     expect(suggestWorkoutPlan).toHaveBeenCalledWith(3);
   });
+});
+
+test("requires age, weight, and height before saving or generating a plan", async () => {
+  renderOnboarding();
+
+  await screen.findByRole("button", {
+    name: /Available Fitness Coach Strength Training AI Coach Selected for workout planning/i
+  });
+  fireEvent.click(screen.getByRole("button", { name: /Save Profile and Refresh Plan/i }));
+
+  expect(screen.getByText("Age is required.")).toBeInTheDocument();
+  expect(screen.getByText("Weight is required.")).toBeInTheDocument();
+  expect(screen.getByText("Height is required.")).toBeInTheDocument();
+  expect(createTraineeProfile).not.toHaveBeenCalled();
+  expect(suggestWorkoutPlan).not.toHaveBeenCalled();
+});
+
+test("rejects obvious junk text in profile context fields", async () => {
+  renderOnboarding();
+
+  await screen.findByRole("button", {
+    name: /Available Fitness Coach Strength Training AI Coach Selected for workout planning/i
+  });
+  fillRequiredBodyContext();
+  fireEvent.change(screen.getByLabelText("Equipment access"), {
+    target: { value: "please go stack overflow" }
+  });
+  fireEvent.click(screen.getByRole("button", { name: /Save Profile and Refresh Plan/i }));
+
+  expect(
+    screen.getByText("Use fitness-related text only; remove links, emails, websites, or unrelated requests.")
+  ).toBeInTheDocument();
+  expect(createTraineeProfile).not.toHaveBeenCalled();
+  expect(suggestWorkoutPlan).not.toHaveBeenCalled();
 });

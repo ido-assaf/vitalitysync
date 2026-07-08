@@ -73,6 +73,93 @@ test("photo meal estimation sends multipart form data to the existing endpoint",
   expect(request.data.get("portionSize")).toBe("full_plate");
 });
 
+test("weekly fitness review uses the read-only preview endpoint", async () => {
+  const { getWeeklyFitnessReview, saveStoredUser } = require("./api");
+
+  saveStoredUser({ userId: 7, userRole: "trainee" });
+  mockApiClient.mockResolvedValueOnce({
+    data: {
+      success: true,
+      data: { reviewDecision: "collect_more_data" },
+      error: null
+    }
+  });
+
+  await getWeeklyFitnessReview(7);
+
+  expect(mockApiClient).toHaveBeenCalledWith(
+    expect.objectContaining({
+      method: "POST",
+      url: "/workout-plans/weekly-review",
+      data: { userId: 7 },
+      headers: expect.objectContaining({
+        "x-user-id": 7,
+        "x-user-role": "trainee"
+      })
+    })
+  );
+});
+
+test("weekly fitness check-in posts answers to the check-in endpoint", async () => {
+  const { sendWeeklyFitnessCheckIn, saveStoredUser } = require("./api");
+
+  saveStoredUser({ userId: 7, userRole: "trainee" });
+  mockApiClient.mockResolvedValueOnce({
+    data: {
+      success: true,
+      data: { received: true },
+      error: null
+    }
+  });
+
+  const answers = [{ question: "What happened?", answer: "No time" }];
+  await sendWeeklyFitnessCheckIn(7, answers);
+
+  expect(mockApiClient).toHaveBeenCalledWith(
+    expect.objectContaining({
+      method: "POST",
+      url: "/workout-plans/weekly-review/check-in",
+      data: { userId: 7, answers },
+      headers: expect.objectContaining({
+        "x-user-id": 7,
+        "x-user-role": "trainee"
+      })
+    })
+  );
+});
+
+test("weekly fitness check-in posts note and selected tags when payload object is used", async () => {
+  const { sendWeeklyFitnessCheckIn, saveStoredUser } = require("./api");
+
+  saveStoredUser({ userId: 7, userRole: "trainee" });
+  mockApiClient.mockResolvedValueOnce({
+    data: {
+      success: true,
+      data: { received: true },
+      error: null
+    }
+  });
+
+  await sendWeeklyFitnessCheckIn(7, {
+    answers: [],
+    generalNote: "The machine was occupied",
+    selectedTags: ["too_hard"]
+  });
+
+  expect(mockApiClient).toHaveBeenCalledWith(
+    expect.objectContaining({
+      method: "POST",
+      url: "/workout-plans/weekly-review/check-in",
+      data: {
+        userId: 7,
+        answers: [],
+        generalNote: "The machine was occupied",
+        selectedTags: ["too_hard"]
+      }
+    })
+  );
+});
+
 test("clears malformed or unsupported stored users", () => {
   const { getStoredUser } = require("./api");
 

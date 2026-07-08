@@ -1,11 +1,13 @@
 const FITNESS_ADAPTATION_DECISION_VERSION = "fitness_adaptation_decision_v0.1";
 
-const BLOCKED_ACTIONS = {
-  aggressiveProgression: "aggressive_progression",
-  increaseVolume: "increase_volume",
-  highIntensityProgression: "high_intensity_progression",
-  increaseRelatedLoad: "increase_load_on_related_movements"
-};
+const {
+  BLOCKED_ACTIONS,
+  EXERCISE_DECISIONS,
+  READINESS_DECISIONS,
+  REASON_CODES,
+  hasAnyReason,
+  hasReason
+} = require("../constants/aiSpecialistReasonCodes");
 
 function unique(values) {
   return [...new Set(values.filter(Boolean))];
@@ -31,32 +33,36 @@ function hasCheckInSignals(checkInSignals) {
 
 function readinessConfidence({ progressSummary, reasonCodes, checkInSignals = [] }) {
   if (!hasProgressData(progressSummary)) {
-    if (reasonCodes.includes("recurring_pain") || reasonCodes.includes("recovery_risk")) return "medium";
+    if (hasAnyReason(reasonCodes, [REASON_CODES.RECURRING_PAIN, REASON_CODES.RECOVERY_RISK])) return "medium";
     return hasCheckInSignals(checkInSignals) ? "medium" : "low";
   }
-  if (reasonCodes.includes("recurring_pain") || reasonCodes.includes("recovery_risk")) {
+  if (hasAnyReason(reasonCodes, [REASON_CODES.RECURRING_PAIN, REASON_CODES.RECOVERY_RISK])) {
     return Number(progressSummary.issueSummary?.recentIssueCount) >= 2 ? "high" : "medium";
   }
-  if (reasonCodes.includes("declining_performance")) return "high";
+  if (hasReason(reasonCodes, REASON_CODES.DECLINING_PERFORMANCE)) return "high";
   if (reasonCodes.length > 0) return "medium";
   return "medium";
 }
 
 function applyCheckInSignals({ signals, reasonCodes, blockedActions }) {
-  if (signals.includes("time_constraint") || signals.includes("repeated_time_constraint")) {
-    reasonCodes.push("time_constraint", "low_adherence");
-    if (signals.includes("repeated_time_constraint")) reasonCodes.push("repeated_time_constraint");
+  if (signals.includes(REASON_CODES.TIME_CONSTRAINT) || signals.includes(REASON_CODES.REPEATED_TIME_CONSTRAINT)) {
+    reasonCodes.push(REASON_CODES.TIME_CONSTRAINT, REASON_CODES.LOW_ADHERENCE);
+    if (signals.includes(REASON_CODES.REPEATED_TIME_CONSTRAINT)) {
+      reasonCodes.push(REASON_CODES.REPEATED_TIME_CONSTRAINT);
+    }
     blockedActions.push(BLOCKED_ACTIONS.aggressiveProgression, BLOCKED_ACTIONS.increaseVolume);
   }
 
-  if (signals.includes("motivation")) {
-    reasonCodes.push("motivation", "low_adherence");
+  if (signals.includes(REASON_CODES.MOTIVATION)) {
+    reasonCodes.push(REASON_CODES.MOTIVATION, REASON_CODES.LOW_ADHERENCE);
     blockedActions.push(BLOCKED_ACTIONS.aggressiveProgression, BLOCKED_ACTIONS.increaseVolume);
   }
 
-  if (signals.includes("pain_signal") || signals.includes("recurring_check_in_pain")) {
-    reasonCodes.push("pain_signal", "recurring_pain");
-    if (signals.includes("recurring_check_in_pain")) reasonCodes.push("recurring_check_in_pain");
+  if (signals.includes(REASON_CODES.PAIN_SIGNAL) || signals.includes(REASON_CODES.RECURRING_CHECK_IN_PAIN)) {
+    reasonCodes.push(REASON_CODES.PAIN_SIGNAL, REASON_CODES.RECURRING_PAIN);
+    if (signals.includes(REASON_CODES.RECURRING_CHECK_IN_PAIN)) {
+      reasonCodes.push(REASON_CODES.RECURRING_CHECK_IN_PAIN);
+    }
     blockedActions.push(
       BLOCKED_ACTIONS.aggressiveProgression,
       BLOCKED_ACTIONS.highIntensityProgression,
@@ -64,9 +70,11 @@ function applyCheckInSignals({ signals, reasonCodes, blockedActions }) {
     );
   }
 
-  if (signals.includes("fatigue_signal") || signals.includes("repeated_fatigue_signal")) {
-    reasonCodes.push("fatigue_signal", "recovery_risk");
-    if (signals.includes("repeated_fatigue_signal")) reasonCodes.push("repeated_fatigue_signal");
+  if (signals.includes(REASON_CODES.FATIGUE_SIGNAL) || signals.includes(REASON_CODES.REPEATED_FATIGUE_SIGNAL)) {
+    reasonCodes.push(REASON_CODES.FATIGUE_SIGNAL, REASON_CODES.RECOVERY_RISK);
+    if (signals.includes(REASON_CODES.REPEATED_FATIGUE_SIGNAL)) {
+      reasonCodes.push(REASON_CODES.REPEATED_FATIGUE_SIGNAL);
+    }
     blockedActions.push(
       BLOCKED_ACTIONS.aggressiveProgression,
       BLOCKED_ACTIONS.highIntensityProgression,
@@ -74,8 +82,8 @@ function applyCheckInSignals({ signals, reasonCodes, blockedActions }) {
     );
   }
 
-  if (signals.includes("too_hard")) {
-    reasonCodes.push("too_hard", "recovery_risk");
+  if (signals.includes(REASON_CODES.TOO_HARD)) {
+    reasonCodes.push(REASON_CODES.TOO_HARD, REASON_CODES.RECOVERY_RISK);
     blockedActions.push(
       BLOCKED_ACTIONS.aggressiveProgression,
       BLOCKED_ACTIONS.highIntensityProgression,
@@ -83,26 +91,33 @@ function applyCheckInSignals({ signals, reasonCodes, blockedActions }) {
     );
   }
 
-  if (signals.includes("equipment_unavailable") || signals.includes("repeated_equipment_constraint")) {
-    reasonCodes.push("equipment_unavailable");
-    if (signals.includes("repeated_equipment_constraint")) reasonCodes.push("repeated_equipment_constraint");
+  if (
+    signals.includes(REASON_CODES.EQUIPMENT_UNAVAILABLE) ||
+    signals.includes(REASON_CODES.REPEATED_EQUIPMENT_CONSTRAINT)
+  ) {
+    reasonCodes.push(REASON_CODES.EQUIPMENT_UNAVAILABLE);
+    if (signals.includes(REASON_CODES.REPEATED_EQUIPMENT_CONSTRAINT)) {
+      reasonCodes.push(REASON_CODES.REPEATED_EQUIPMENT_CONSTRAINT);
+    }
   }
 }
 
 function decisionFromReasonCodes(reasonCodes) {
-  if (reasonCodes.includes("recurring_pain")) return "needs_review";
-  if (reasonCodes.includes("recovery_risk") || reasonCodes.includes("declining_performance")) {
-    return "recovery_focus";
+  if (hasReason(reasonCodes, REASON_CODES.RECURRING_PAIN)) return READINESS_DECISIONS.NEEDS_REVIEW;
+  if (hasAnyReason(reasonCodes, [REASON_CODES.RECOVERY_RISK, REASON_CODES.DECLINING_PERFORMANCE])) {
+    return READINESS_DECISIONS.RECOVERY_FOCUS;
   }
   if (
-    reasonCodes.includes("low_adherence") ||
-    reasonCodes.includes("low_set_completion") ||
-    reasonCodes.includes("equipment_unavailable")
+    hasAnyReason(reasonCodes, [
+      REASON_CODES.LOW_ADHERENCE,
+      REASON_CODES.LOW_SET_COMPLETION,
+      REASON_CODES.EQUIPMENT_UNAVAILABLE
+    ])
   ) {
-    return "conservative";
+    return READINESS_DECISIONS.CONSERVATIVE;
   }
 
-  return "normal";
+  return READINESS_DECISIONS.NORMAL;
 }
 
 function buildReadinessDecision(progressSummary, checkInSignals = []) {
@@ -111,18 +126,18 @@ function buildReadinessDecision(progressSummary, checkInSignals = []) {
   const reasonCodes = [];
   const blockedActions = [];
 
-  if (flags.includes("low_adherence")) {
-    reasonCodes.push("low_adherence");
+  if (flags.includes(REASON_CODES.LOW_ADHERENCE)) {
+    reasonCodes.push(REASON_CODES.LOW_ADHERENCE);
     blockedActions.push(BLOCKED_ACTIONS.aggressiveProgression, BLOCKED_ACTIONS.increaseVolume);
   }
 
-  if (flags.includes("low_set_completion")) {
-    reasonCodes.push("low_set_completion");
+  if (flags.includes(REASON_CODES.LOW_SET_COMPLETION)) {
+    reasonCodes.push(REASON_CODES.LOW_SET_COMPLETION);
     blockedActions.push(BLOCKED_ACTIONS.aggressiveProgression, BLOCKED_ACTIONS.increaseVolume);
   }
 
   if (flags.includes("recurring_pain_reported")) {
-    reasonCodes.push("recurring_pain");
+    reasonCodes.push(REASON_CODES.RECURRING_PAIN);
     blockedActions.push(
       BLOCKED_ACTIONS.aggressiveProgression,
       BLOCKED_ACTIONS.highIntensityProgression,
@@ -131,7 +146,7 @@ function buildReadinessDecision(progressSummary, checkInSignals = []) {
   }
 
   if (flags.includes("limited_recovery_signal")) {
-    reasonCodes.push("recovery_risk");
+    reasonCodes.push(REASON_CODES.RECOVERY_RISK);
     blockedActions.push(
       BLOCKED_ACTIONS.aggressiveProgression,
       BLOCKED_ACTIONS.highIntensityProgression,
@@ -140,7 +155,7 @@ function buildReadinessDecision(progressSummary, checkInSignals = []) {
   }
 
   if (flags.includes("declining_exercise_performance")) {
-    reasonCodes.push("declining_performance");
+    reasonCodes.push(REASON_CODES.DECLINING_PERFORMANCE);
     blockedActions.push(BLOCKED_ACTIONS.aggressiveProgression, BLOCKED_ACTIONS.highIntensityProgression);
   }
 
@@ -176,8 +191,8 @@ function exerciseDecision(exerciseProgress, readinessBlockedActions) {
   if (trend === "progressing") {
     return {
       ...base,
-      decision: "progress_cautiously",
-      reasonCodes: ["progressing_no_pain", "sufficient_exposures"],
+      decision: EXERCISE_DECISIONS.PROGRESS_CAUTIOUSLY,
+      reasonCodes: [REASON_CODES.PROGRESSING_NO_PAIN, REASON_CODES.SUFFICIENT_EXPOSURES],
       blockedActions: unique(readinessBlockedActions)
     };
   }
@@ -185,8 +200,8 @@ function exerciseDecision(exerciseProgress, readinessBlockedActions) {
   if (trend === "plateau") {
     return {
       ...base,
-      decision: "review_or_adjust",
-      reasonCodes: ["plateau_3_plus_exposures"],
+      decision: EXERCISE_DECISIONS.REVIEW_OR_ADJUST,
+      reasonCodes: [REASON_CODES.PLATEAU_3_PLUS_EXPOSURES],
       blockedActions: unique(readinessBlockedActions)
     };
   }
@@ -194,8 +209,8 @@ function exerciseDecision(exerciseProgress, readinessBlockedActions) {
   if (trend === "declining") {
     return {
       ...base,
-      decision: "reduce_or_recover",
-      reasonCodes: ["declining_performance"],
+      decision: EXERCISE_DECISIONS.REDUCE_OR_RECOVER,
+      reasonCodes: [REASON_CODES.DECLINING_PERFORMANCE],
       blockedActions: unique([
         ...readinessBlockedActions,
         BLOCKED_ACTIONS.aggressiveProgression,
@@ -206,27 +221,20 @@ function exerciseDecision(exerciseProgress, readinessBlockedActions) {
 
   return {
     ...base,
-    decision: "collect_more_data",
-    reasonCodes: ["insufficient_data"],
+    decision: EXERCISE_DECISIONS.COLLECT_MORE_DATA,
+    reasonCodes: [REASON_CODES.INSUFFICIENT_DATA],
     blockedActions: unique(readinessBlockedActions)
   };
 }
 
 function buildFitnessAdaptationDecisions({
   progressSummary,
-  profile = null,
-  expertRules = [],
-  knowledgeItems = [],
   checkInSignals = []
 } = {}) {
-  void profile;
-  void expertRules;
-  void knowledgeItems;
-
   if (!hasProgressData(progressSummary) && !hasCheckInSignals(checkInSignals)) {
     return {
       version: FITNESS_ADAPTATION_DECISION_VERSION,
-      readinessDecision: "normal",
+      readinessDecision: READINESS_DECISIONS.NORMAL,
       readinessReasonCodes: [],
       readinessConfidence: "low",
       blockedActions: [],

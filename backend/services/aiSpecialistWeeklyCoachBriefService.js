@@ -1,5 +1,14 @@
 const FITNESS_WEEKLY_COACH_BRIEF_VERSION = "fitness_weekly_coach_brief_v0.1";
 
+const {
+  EXERCISE_DECISIONS,
+  PLAN_UPDATE_DECISIONS,
+  REASON_CODES,
+  REVIEW_ACTION_TYPES,
+  hasAnyReason,
+  hasReason
+} = require("../constants/aiSpecialistReasonCodes");
+
 const MAX_FINDINGS = 4;
 const MAX_QUESTIONS = 3;
 const MAX_SAFETY_NOTES = 3;
@@ -40,19 +49,22 @@ function allExercisesNeedMoreData(adaptationDecisions) {
 
   return (
     exerciseDecisions.length > 0 &&
-    exerciseDecisions.every((item) => item.decision === "collect_more_data")
+    exerciseDecisions.every((item) => item.decision === EXERCISE_DECISIONS.COLLECT_MORE_DATA)
   );
 }
 
 function reviewDecisionFor({ progressSummary, adaptationDecisions, planUpdateProposal, reasonCodes }) {
   if (planUpdateProposal?.validationSummary?.isSafeProposal === false) return "needs_review";
-  if (planUpdateProposal?.updateDecision === "needs_review" || reasonCodes.includes("recurring_pain")) {
+  if (
+    planUpdateProposal?.updateDecision === PLAN_UPDATE_DECISIONS.NEEDS_REVIEW ||
+    hasReason(reasonCodes, REASON_CODES.RECURRING_PAIN)
+  ) {
     return "needs_review";
   }
-  if (planUpdateProposal?.updateDecision === "propose_changes") return "minor_adjustments";
+  if (planUpdateProposal?.updateDecision === PLAN_UPDATE_DECISIONS.PROPOSE_CHANGES) return "minor_adjustments";
   if (
     !hasProgressData(progressSummary) ||
-    planUpdateProposal?.updateDecision === "collect_more_data" ||
+    planUpdateProposal?.updateDecision === PLAN_UPDATE_DECISIONS.COLLECT_MORE_DATA ||
     allExercisesNeedMoreData(adaptationDecisions)
   ) {
     return "collect_more_data";
@@ -68,49 +80,54 @@ function headlineFor(reviewDecision) {
 }
 
 function findingForChange(change) {
-  if (change.type === "cautious_progression") {
+  if (change.type === REVIEW_ACTION_TYPES.CAUTIOUS_PROGRESSION) {
     return change.exerciseName
       ? `${change.exerciseName} is progressing; consider cautious progression.`
       : "Progressing exercises can use cautious progression.";
   }
-  if (change.type === "review_or_adjust") {
+  if (change.type === REVIEW_ACTION_TYPES.REVIEW_OR_ADJUST) {
     return change.exerciseName
       ? `${change.exerciseName} looks stuck; review the setup before changing more.`
       : "A plateau needs review before bigger changes.";
   }
-  if (change.type === "simplify_session") {
-    if ((change.reasonCodes || []).includes("time_constraint")) {
+  if (change.type === REVIEW_ACTION_TYPES.SIMPLIFY_SESSION) {
+    if (hasReason(change.reasonCodes || [], REASON_CODES.TIME_CONSTRAINT)) {
       return "Time constraints support simplifying the week before adding work.";
     }
-    if ((change.reasonCodes || []).includes("motivation")) {
+    if (hasReason(change.reasonCodes || [], REASON_CODES.MOTIVATION)) {
       return "Motivation signals support a simpler week to rebuild consistency.";
     }
     return "Session completion is low; simplify before adding work.";
   }
-  if (change.type === "reduce_load_or_volume") {
-    if ((change.reasonCodes || []).includes("too_hard")) {
+  if (change.type === REVIEW_ACTION_TYPES.REDUCE_LOAD_OR_VOLUME) {
+    if (hasReason(change.reasonCodes || [], REASON_CODES.TOO_HARD)) {
       return "Difficulty signals support reducing load or volume.";
     }
     return "Performance or recovery signals support reducing load or volume.";
   }
-  if (change.type === "review_substitution_candidate") {
-    if ((change.reasonCodes || []).includes("equipment_unavailable")) {
+  if (change.type === REVIEW_ACTION_TYPES.REVIEW_SUBSTITUTION_CANDIDATE) {
+    if (hasReason(change.reasonCodes || [], REASON_CODES.EQUIPMENT_UNAVAILABLE)) {
       return "Equipment availability makes a substitution review appropriate.";
     }
     return "Pain signals make a substitution review appropriate.";
   }
-  if (change.type === "collect_more_data") return "There is not enough exercise history for a confident adjustment.";
+  if (change.type === REVIEW_ACTION_TYPES.COLLECT_MORE_DATA) {
+    return "There is not enough exercise history for a confident adjustment.";
+  }
   return null;
 }
 
 function findingForRejectedChange(change) {
-  if (change.type === "increase_volume" || change.action === "increase_volume") {
+  if (change.type === REVIEW_ACTION_TYPES.INCREASE_VOLUME || change.action === "increase_volume") {
     return "Volume increase rejected by readiness signals.";
   }
-  if (change.type === "cautious_progression" || change.action === "increase_reps_or_small_load") {
+  if (change.type === REVIEW_ACTION_TYPES.CAUTIOUS_PROGRESSION || change.action === "increase_reps_or_small_load") {
     return "Progression blocked by safety or readiness signals.";
   }
-  if (change.type === "high_intensity_progression" || change.action === "high_intensity_progression") {
+  if (
+    change.type === REVIEW_ACTION_TYPES.HIGH_INTENSITY_PROGRESSION ||
+    change.action === "high_intensity_progression"
+  ) {
     return "High-intensity progression rejected by recovery signals.";
   }
   return "Unsafe or low-confidence change was rejected.";
@@ -128,16 +145,16 @@ function buildFindings({ progressSummary, adaptationDecisions, planUpdateProposa
   if (allExercisesNeedMoreData(adaptationDecisions)) {
     findings.push("Exercise history is still too thin for a confident change.");
   }
-  if (reasonCodes.includes("low_adherence") || reasonCodes.includes("low_set_completion")) {
+  if (hasAnyReason(reasonCodes, [REASON_CODES.LOW_ADHERENCE, REASON_CODES.LOW_SET_COMPLETION])) {
     findings.push("Completion is the main limiter before adding more work.");
   }
-  if (reasonCodes.includes("recovery_risk")) {
+  if (hasReason(reasonCodes, REASON_CODES.RECOVERY_RISK)) {
     findings.push("Recovery signals suggest a conservative week.");
   }
-  if (reasonCodes.includes("equipment_unavailable")) {
+  if (hasReason(reasonCodes, REASON_CODES.EQUIPMENT_UNAVAILABLE)) {
     findings.push("Equipment availability may require a substitution.");
   }
-  if (reasonCodes.includes("too_hard")) {
+  if (hasReason(reasonCodes, REASON_CODES.TOO_HARD)) {
     findings.push("The current prescription may be too difficult this week.");
   }
 
@@ -150,19 +167,19 @@ function buildQuestions({ reviewDecision, reasonCodes, adaptationDecisions }) {
   if (reviewDecision === "collect_more_data" || allExercisesNeedMoreData(adaptationDecisions)) {
     questions.push("Can you log sets, reps, load, and how the session felt this week?");
   }
-  if (reasonCodes.includes("plateau_3_plus_exposures")) {
+  if (hasReason(reasonCodes, REASON_CODES.PLATEAU_3_PLUS_EXPOSURES)) {
     questions.push("What limited the stuck lift most: load, technique, or recovery?");
   }
-  if (reasonCodes.includes("low_adherence") || reasonCodes.includes("low_set_completion")) {
+  if (hasAnyReason(reasonCodes, [REASON_CODES.LOW_ADHERENCE, REASON_CODES.LOW_SET_COMPLETION])) {
     questions.push("What made sessions hard to complete: time, fatigue, difficulty, or motivation?");
   }
-  if (reasonCodes.includes("recurring_pain")) {
+  if (hasReason(reasonCodes, REASON_CODES.RECURRING_PAIN)) {
     questions.push("Which movement caused pain, and did it change during or after training?");
   }
-  if (reasonCodes.includes("recovery_risk")) {
+  if (hasReason(reasonCodes, REASON_CODES.RECOVERY_RISK)) {
     questions.push("How were sleep, soreness, and energy across the week?");
   }
-  if (reasonCodes.includes("equipment_unavailable")) {
+  if (hasReason(reasonCodes, REASON_CODES.EQUIPMENT_UNAVAILABLE)) {
     questions.push("Which equipment was unavailable, and what similar option was open?");
   }
 
@@ -175,13 +192,13 @@ function buildSafetyNotes({ planUpdateProposal, reasonCodes }) {
   if (planUpdateProposal?.validationSummary?.isSafeProposal === false) {
     notes.push("Proposal validation failed; review before applying changes.");
   }
-  if (reasonCodes.includes("recurring_pain")) {
+  if (hasReason(reasonCodes, REASON_CODES.RECURRING_PAIN)) {
     notes.push("Do not progress painful movements until reviewed.");
   }
-  if (reasonCodes.includes("recovery_risk") || reasonCodes.includes("declining_performance")) {
+  if (hasAnyReason(reasonCodes, [REASON_CODES.RECOVERY_RISK, REASON_CODES.DECLINING_PERFORMANCE])) {
     notes.push("Avoid high-intensity progression while recovery risk is present.");
   }
-  if (reasonCodes.includes("low_adherence") || reasonCodes.includes("low_set_completion")) {
+  if (hasAnyReason(reasonCodes, [REASON_CODES.LOW_ADHERENCE, REASON_CODES.LOW_SET_COMPLETION])) {
     notes.push("Avoid adding volume until completion improves.");
   }
 
@@ -195,16 +212,22 @@ function recommendedNextStepFor({ reviewDecision, planUpdateProposal, reasonCode
   if (reviewDecision === "collect_more_data") {
     return "Keep the plan stable and collect clearer training logs this week.";
   }
-  if (reasonCodes.includes("low_adherence") || reasonCodes.includes("low_set_completion")) {
+  if (hasAnyReason(reasonCodes, [REASON_CODES.LOW_ADHERENCE, REASON_CODES.LOW_SET_COMPLETION])) {
     return "Simplify the week and avoid increasing volume.";
   }
-  if (reasonCodes.includes("recovery_risk") || reasonCodes.includes("declining_performance")) {
+  if (hasAnyReason(reasonCodes, [REASON_CODES.RECOVERY_RISK, REASON_CODES.DECLINING_PERFORMANCE])) {
     return "Use a recovery-focused adjustment before progressing intensity.";
   }
-  if ((planUpdateProposal?.proposedChanges || []).some((change) => change.type === "cautious_progression")) {
+  if (
+    (planUpdateProposal?.proposedChanges || []).some(
+      (change) => change.type === REVIEW_ACTION_TYPES.CAUTIOUS_PROGRESSION
+    )
+  ) {
     return "Apply only cautious progression where the proposal allows it.";
   }
-  if ((planUpdateProposal?.proposedChanges || []).some((change) => change.type === "review_or_adjust")) {
+  if (
+    (planUpdateProposal?.proposedChanges || []).some((change) => change.type === REVIEW_ACTION_TYPES.REVIEW_OR_ADJUST)
+  ) {
     return "Review stuck exercises before making larger plan changes.";
   }
   return "Keep the current plan and reassess after the next logged sessions.";
@@ -222,21 +245,32 @@ function reviewActionForChange(change, reasonCodes) {
   const localReasonCodes = change.reasonCodes || [];
   const changeReasonCodes = localReasonCodes.length > 0 ? unique(localReasonCodes) : reasonCodes;
 
-  if (change.type === "review_substitution_candidate") {
-    if (includesAny(changeReasonCodes, ["recurring_pain", "pain_signal", "recurring_check_in_pain"])) {
+  if (change.type === REVIEW_ACTION_TYPES.REVIEW_SUBSTITUTION_CANDIDATE) {
+    if (
+      includesAny(changeReasonCodes, [
+        REASON_CODES.RECURRING_PAIN,
+        REASON_CODES.PAIN_SIGNAL,
+        REASON_CODES.RECURRING_CHECK_IN_PAIN
+      ])
+    ) {
       return {
-        type: "review_substitution_candidate",
+        type: REVIEW_ACTION_TYPES.REVIEW_SUBSTITUTION_CANDIDATE,
         label: "Review a safer substitute",
-        reason: changeReasonCodes.includes("recurring_check_in_pain")
+        reason: hasReason(changeReasonCodes, REASON_CODES.RECURRING_CHECK_IN_PAIN)
           ? "Pain was reported more than once, so review a safer substitute before progressing."
           : "Pain signals were reported, so progression should wait.",
         status: "preview_only",
         priority: 1
       };
     }
-    if (includesAny(changeReasonCodes, ["equipment_unavailable", "repeated_equipment_constraint"])) {
+    if (
+      includesAny(changeReasonCodes, [
+        REASON_CODES.EQUIPMENT_UNAVAILABLE,
+        REASON_CODES.REPEATED_EQUIPMENT_CONSTRAINT
+      ])
+    ) {
       return {
-        type: "review_substitution_candidate",
+        type: REVIEW_ACTION_TYPES.REVIEW_SUBSTITUTION_CANDIDATE,
         label: "Review an available substitute",
         reason: "Equipment availability may require a similar replacement.",
         status: "preview_only",
@@ -246,13 +280,18 @@ function reviewActionForChange(change, reasonCodes) {
   }
 
   if (
-    change.type === "simplify_session" &&
-    includesAny(changeReasonCodes, ["low_adherence", "time_constraint", "repeated_time_constraint", "motivation"])
+    change.type === REVIEW_ACTION_TYPES.SIMPLIFY_SESSION &&
+    includesAny(changeReasonCodes, [
+      REASON_CODES.LOW_ADHERENCE,
+      REASON_CODES.TIME_CONSTRAINT,
+      REASON_CODES.REPEATED_TIME_CONSTRAINT,
+      REASON_CODES.MOTIVATION
+    ])
   ) {
     return {
-      type: "simplify_session",
+      type: REVIEW_ACTION_TYPES.SIMPLIFY_SESSION,
       label: "Simplify this week",
-      reason: changeReasonCodes.includes("repeated_time_constraint")
+      reason: hasReason(changeReasonCodes, REASON_CODES.REPEATED_TIME_CONSTRAINT)
         ? "Time constraints repeated, so simplify before adding work."
         : "Adherence or time signals suggest reducing optional work.",
       status: "preview_only",
@@ -261,17 +300,17 @@ function reviewActionForChange(change, reasonCodes) {
   }
 
   if (
-    change.type === "reduce_load_or_volume" &&
+    change.type === REVIEW_ACTION_TYPES.REDUCE_LOAD_OR_VOLUME &&
     includesAny(changeReasonCodes, [
-      "recovery_risk",
-      "fatigue_signal",
-      "repeated_fatigue_signal",
-      "too_hard",
-      "declining_performance"
+      REASON_CODES.RECOVERY_RISK,
+      REASON_CODES.FATIGUE_SIGNAL,
+      REASON_CODES.REPEATED_FATIGUE_SIGNAL,
+      REASON_CODES.TOO_HARD,
+      REASON_CODES.DECLINING_PERFORMANCE
     ])
   ) {
     return {
-      type: "reduce_load_or_volume",
+      type: REVIEW_ACTION_TYPES.REDUCE_LOAD_OR_VOLUME,
       label: "Use a recovery-focused adjustment",
       reason: "Recovery or difficulty signals suggest reducing load or volume.",
       status: "preview_only",
@@ -279,9 +318,12 @@ function reviewActionForChange(change, reasonCodes) {
     };
   }
 
-  if (change.type === "review_or_adjust" && changeReasonCodes.includes("plateau_3_plus_exposures")) {
+  if (
+    change.type === REVIEW_ACTION_TYPES.REVIEW_OR_ADJUST &&
+    hasReason(changeReasonCodes, REASON_CODES.PLATEAU_3_PLUS_EXPOSURES)
+  ) {
     return {
-      type: "review_or_adjust",
+      type: REVIEW_ACTION_TYPES.REVIEW_OR_ADJUST,
       label: "Review the stuck exercise",
       reason: "A plateau needs setup review before bigger changes.",
       status: "preview_only",
@@ -312,10 +354,13 @@ function coachNoteFor({ reviewDecision, planUpdateProposal, reviewActions }) {
   if (reviewActions.length > 0) {
     return "These are review suggestions, not automatic plan changes.";
   }
-  if (reviewDecision === "collect_more_data" || planUpdateProposal?.updateDecision === "collect_more_data") {
+  if (
+    reviewDecision === "collect_more_data" ||
+    planUpdateProposal?.updateDecision === PLAN_UPDATE_DECISIONS.COLLECT_MORE_DATA
+  ) {
     return "Keep logging this week so the coach can read the trend.";
   }
-  if (reviewDecision === "keep_plan" || planUpdateProposal?.updateDecision === "maintain") {
+  if (reviewDecision === "keep_plan" || planUpdateProposal?.updateDecision === PLAN_UPDATE_DECISIONS.MAINTAIN) {
     return "Keep the current plan. No plan change is needed right now.";
   }
   return "Nice consistency. The coach is watching trends before changing anything.";
@@ -324,17 +369,8 @@ function coachNoteFor({ reviewDecision, planUpdateProposal, reviewActions }) {
 function buildFitnessWeeklyCoachBrief({
   progressSummary,
   adaptationDecisions,
-  planUpdateProposal,
-  specialistContext = null,
-  profile = null,
-  expertRules = [],
-  knowledgeItems = []
+  planUpdateProposal
 } = {}) {
-  void specialistContext;
-  void profile;
-  void expertRules;
-  void knowledgeItems;
-
   const reasonCodes = reasonCodesFrom({ adaptationDecisions, planUpdateProposal });
   const reviewDecision = reviewDecisionFor({
     progressSummary,

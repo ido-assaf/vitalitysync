@@ -1,11 +1,14 @@
 const FITNESS_PLAN_UPDATE_PROPOSAL_VERSION = "fitness_plan_update_proposal_v0.1";
 
-const BLOCKED_ACTIONS = {
-  aggressiveProgression: "aggressive_progression",
-  increaseVolume: "increase_volume",
-  highIntensityProgression: "high_intensity_progression",
-  increaseRelatedLoad: "increase_load_on_related_movements"
-};
+const {
+  BLOCKED_ACTIONS,
+  EXERCISE_DECISIONS,
+  PLAN_UPDATE_DECISIONS,
+  REASON_CODES,
+  REVIEW_ACTION_TYPES,
+  hasAnyReason,
+  hasReason
+} = require("../constants/aiSpecialistReasonCodes");
 
 const ACTION_BLOCKERS = {
   increase_volume: [BLOCKED_ACTIONS.increaseVolume],
@@ -68,9 +71,11 @@ function canProposeChange(changeItem, blockedActions) {
 
   if (
     changeItem.confidence === "low" &&
-    !["collect_more_data", "maintain_current_prescription", "review_substitution_candidate"].includes(
-      changeItem.type
-    )
+    ![
+      REVIEW_ACTION_TYPES.COLLECT_MORE_DATA,
+      REVIEW_ACTION_TYPES.MAINTAIN_CURRENT_PRESCRIPTION,
+      REVIEW_ACTION_TYPES.REVIEW_SUBSTITUTION_CANDIDATE
+    ].includes(changeItem.type)
   ) {
     return { allowed: false, blockers: ["low_confidence"] };
   }
@@ -94,71 +99,74 @@ function readinessChanges(adaptationDecisions) {
   const changes = [];
   const rejectedCandidates = [];
 
-  if (reasonCodes.includes("low_adherence") || reasonCodes.includes("low_set_completion")) {
+  if (hasAnyReason(reasonCodes, [REASON_CODES.LOW_ADHERENCE, REASON_CODES.LOW_SET_COMPLETION])) {
     changes.push(
       change({
-        type: "simplify_session",
+        type: REVIEW_ACTION_TYPES.SIMPLIFY_SESSION,
         action: "reduce_optional_volume",
-        reasonCodes: reasonCodes.filter((reason) => reason === "low_adherence" || reason === "low_set_completion"),
-        confidence
-      })
-    );
-    rejectedCandidates.push(
-      change({
-        type: "increase_volume",
-        action: "increase_volume",
-        reasonCodes: ["low_adherence"],
-        confidence
-      })
-    );
-  }
-
-  if (reasonCodes.includes("recurring_pain")) {
-    changes.push(
-      change({
-        type: "review_substitution_candidate",
-        action: "mark_substitution_review_candidate",
-        reasonCodes: ["recurring_pain"],
-        confidence
-      })
-    );
-    rejectedCandidates.push(
-      change({
-        type: "cautious_progression",
-        action: "increase_reps_or_small_load",
-        reasonCodes: ["recurring_pain"],
-        confidence
-      })
-    );
-  }
-
-  if (reasonCodes.includes("equipment_unavailable")) {
-    changes.push(
-      change({
-        type: "review_substitution_candidate",
-        action: "mark_substitution_review_candidate",
-        reasonCodes: ["equipment_unavailable"],
-        confidence
-      })
-    );
-  }
-
-  if (reasonCodes.includes("recovery_risk") || reasonCodes.includes("declining_performance")) {
-    changes.push(
-      change({
-        type: "reduce_load_or_volume",
-        action: "reduce_intensity_or_volume",
-        reasonCodes: reasonCodes.filter(
-          (reason) => reason === "recovery_risk" || reason === "declining_performance" || reason === "too_hard"
+        reasonCodes: reasonCodes.filter((reason) =>
+          [REASON_CODES.LOW_ADHERENCE, REASON_CODES.LOW_SET_COMPLETION].includes(reason)
         ),
         confidence
       })
     );
     rejectedCandidates.push(
       change({
-        type: "high_intensity_progression",
+        type: REVIEW_ACTION_TYPES.INCREASE_VOLUME,
+        action: "increase_volume",
+        reasonCodes: [REASON_CODES.LOW_ADHERENCE],
+        confidence
+      })
+    );
+  }
+
+  if (hasReason(reasonCodes, REASON_CODES.RECURRING_PAIN)) {
+    changes.push(
+      change({
+        type: REVIEW_ACTION_TYPES.REVIEW_SUBSTITUTION_CANDIDATE,
+        action: "mark_substitution_review_candidate",
+        reasonCodes: [REASON_CODES.RECURRING_PAIN],
+        confidence
+      })
+    );
+    rejectedCandidates.push(
+      change({
+        type: REVIEW_ACTION_TYPES.CAUTIOUS_PROGRESSION,
+        action: "increase_reps_or_small_load",
+        reasonCodes: [REASON_CODES.RECURRING_PAIN],
+        confidence
+      })
+    );
+  }
+
+  if (hasReason(reasonCodes, REASON_CODES.EQUIPMENT_UNAVAILABLE)) {
+    changes.push(
+      change({
+        type: REVIEW_ACTION_TYPES.REVIEW_SUBSTITUTION_CANDIDATE,
+        action: "mark_substitution_review_candidate",
+        reasonCodes: [REASON_CODES.EQUIPMENT_UNAVAILABLE],
+        confidence
+      })
+    );
+  }
+
+  if (hasAnyReason(reasonCodes, [REASON_CODES.RECOVERY_RISK, REASON_CODES.DECLINING_PERFORMANCE])) {
+    changes.push(
+      change({
+        type: REVIEW_ACTION_TYPES.REDUCE_LOAD_OR_VOLUME,
+        action: "reduce_intensity_or_volume",
+        reasonCodes: reasonCodes.filter(
+          (reason) =>
+            [REASON_CODES.RECOVERY_RISK, REASON_CODES.DECLINING_PERFORMANCE, REASON_CODES.TOO_HARD].includes(reason)
+        ),
+        confidence
+      })
+    );
+    rejectedCandidates.push(
+      change({
+        type: REVIEW_ACTION_TYPES.HIGH_INTENSITY_PROGRESSION,
         action: "high_intensity_progression",
-        reasonCodes: ["recovery_risk"],
+        reasonCodes: [REASON_CODES.RECOVERY_RISK],
         confidence
       })
     );
@@ -175,33 +183,33 @@ function exerciseChangeForDecision(exerciseDecision) {
     confidence: exerciseDecision.confidence || "medium"
   };
 
-  if (exerciseDecision.decision === "progress_cautiously") {
+  if (exerciseDecision.decision === EXERCISE_DECISIONS.PROGRESS_CAUTIOUSLY) {
     return change({
       ...base,
-      type: "cautious_progression",
+      type: REVIEW_ACTION_TYPES.CAUTIOUS_PROGRESSION,
       action: "increase_reps_or_small_load"
     });
   }
 
-  if (exerciseDecision.decision === "review_or_adjust") {
+  if (exerciseDecision.decision === EXERCISE_DECISIONS.REVIEW_OR_ADJUST) {
     return change({
       ...base,
-      type: "review_or_adjust",
+      type: REVIEW_ACTION_TYPES.REVIEW_OR_ADJUST,
       action: "review_rep_range_or_substitution"
     });
   }
 
-  if (exerciseDecision.decision === "reduce_or_recover") {
+  if (exerciseDecision.decision === EXERCISE_DECISIONS.REDUCE_OR_RECOVER) {
     return change({
       ...base,
-      type: "reduce_load_or_volume",
+      type: REVIEW_ACTION_TYPES.REDUCE_LOAD_OR_VOLUME,
       action: "reduce_load_or_volume"
     });
   }
 
   return change({
     ...base,
-    type: "collect_more_data",
+    type: REVIEW_ACTION_TYPES.COLLECT_MORE_DATA,
     action: "collect_more_data"
   });
 }
@@ -218,39 +226,37 @@ function proposalConfidence({ adaptationDecisions, proposedChanges }) {
 }
 
 function updateDecisionFor({ adaptationDecisions, proposedChanges }) {
-  if (!hasAdaptationData(adaptationDecisions)) return "maintain";
-  if (adaptationDecisions.readinessDecision === "needs_review") return "needs_review";
-  if (proposedChanges.some((item) => item.type === "collect_more_data") && proposedChanges.length === 1) {
-    return "collect_more_data";
+  if (!hasAdaptationData(adaptationDecisions)) return PLAN_UPDATE_DECISIONS.MAINTAIN;
+  if (adaptationDecisions.readinessDecision === PLAN_UPDATE_DECISIONS.NEEDS_REVIEW) {
+    return PLAN_UPDATE_DECISIONS.NEEDS_REVIEW;
   }
-  if (proposedChanges.some((item) => item.type !== "maintain_current_prescription")) {
-    return "propose_changes";
+  if (
+    proposedChanges.some((item) => item.type === REVIEW_ACTION_TYPES.COLLECT_MORE_DATA) &&
+    proposedChanges.length === 1
+  ) {
+    return PLAN_UPDATE_DECISIONS.COLLECT_MORE_DATA;
   }
-  return "maintain";
+  if (proposedChanges.some((item) => item.type !== REVIEW_ACTION_TYPES.MAINTAIN_CURRENT_PRESCRIPTION)) {
+    return PLAN_UPDATE_DECISIONS.PROPOSE_CHANGES;
+  }
+  return PLAN_UPDATE_DECISIONS.MAINTAIN;
 }
 
 function validationSummaryFor({ rejectedChanges, invalidProposals }) {
   return {
     isSafeProposal: invalidProposals.length === 0,
-    warnings: rejectedChanges.length > 0 ? ["blocked_changes_rejected"] : [],
+    warnings: rejectedChanges.length > 0 ? [REASON_CODES.BLOCKED_CHANGES_REJECTED] : [],
     rejectedCount: rejectedChanges.length
   };
 }
 
 function buildFitnessPlanUpdateProposal({
-  adaptationDecisions,
-  profile = null,
-  expertRules = [],
-  knowledgeItems = []
+  adaptationDecisions
 } = {}) {
-  void profile;
-  void expertRules;
-  void knowledgeItems;
-
   if (!hasAdaptationData(adaptationDecisions)) {
     return {
       version: FITNESS_PLAN_UPDATE_PROPOSAL_VERSION,
-      updateDecision: "maintain",
+      updateDecision: PLAN_UPDATE_DECISIONS.MAINTAIN,
       proposedChanges: [],
       rejectedChanges: [],
       blockedActions: [],

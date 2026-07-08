@@ -643,31 +643,59 @@ function Dashboard() {
         </Link>
 
         <div className="daily-dashboard__side-stack">
-          <article className="dashboard-insight-card">
-            <div className="dashboard-coach">
+          <section className="dashboard-coach-stack" aria-labelledby="dashboard-coaches-heading">
+            <div className="dashboard-coach-stack__heading">
+              <div>
+                <p className="eyebrow">AI specialists</p>
+                <h2 id="dashboard-coaches-heading">AI Coaches</h2>
+              </div>
+              <span>Synced</span>
+            </div>
+            <article className="dashboard-coach-card dashboard-coach-card--fitness">
               <span className="dashboard-coach__avatar">
-                <DashboardIcon name="user" />
+                <DashboardIcon name="dumbbell" />
               </span>
               <div>
-                <p className="eyebrow">AI coach insight</p>
-                <h2>{aiCoach?.name || "Vitality Coach"}</h2>
+                <h3>{aiCoach?.name || "Fitness Coach"}</h3>
+                <small>Strength · Conditioning · Recovery</small>
+                <p>
+                  {aiCoach?.description ||
+                    "Your plan uses your profile, equipment, goals, and limitations."}
+                </p>
+                <strong>
+                  {Array.isArray(aiCoach?.rules) && aiCoach.rules[0]
+                    ? aiCoach.rules[0]
+                    : "Progress gradually and respect recovery."}
+                </strong>
               </div>
-              <span className="dashboard-coach__badge">
-                <DashboardIcon name="sparkles" />
-                AI Coach
+            </article>
+            <article className="dashboard-coach-card dashboard-coach-card--nutrition">
+              <span className="dashboard-coach__avatar">
+                <DashboardIcon name="leaf" />
               </span>
-            </div>
-            <p>
-              {aiCoach?.description ||
-                "Your plan currently uses your fitness profile, goals, equipment, and limitations."}
-            </p>
-            <strong className="dashboard-coach__recommendation">
-              <DashboardIcon name="sparkles" />
-              {Array.isArray(aiCoach?.rules) && aiCoach.rules[0]
-                ? aiCoach.rules[0]
-                : "Progress gradually and respect recovery."}
-            </strong>
-          </article>
+              <div>
+                <h3>Nutritionist</h3>
+                <small>Calories · Protein · Meal guidance</small>
+                <p>
+                  Targets and food guidance adapt from your fitness profile and nutrition logs.
+                </p>
+                <strong>Focus: fuel training and recovery.</strong>
+              </div>
+            </article>
+            <article className="dashboard-coach-card dashboard-coach-card--sport">
+              <span className="dashboard-coach__avatar">
+                <DashboardIcon name="sparkles" />
+              </span>
+              <div>
+                <h3>Sport Coach</h3>
+                <small>Football · Basketball · Skill work</small>
+                <p>
+                  Sport-specific coaching will unlock after the core coaching engine is stronger.
+                </p>
+                <strong className="dashboard-coach-card__soon">Coming soon</strong>
+              </div>
+            </article>
+          </section>
 
           <article className="dashboard-quick-actions">
             <p className="eyebrow">Quick actions</p>

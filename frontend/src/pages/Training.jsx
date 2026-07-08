@@ -7,8 +7,10 @@ import WorkoutPlanCard from "../components/WorkoutPlanCard";
 import {
   getActiveWorkoutSession,
   getStoredUser,
+  getWeeklyFitnessReview,
   getWorkoutPlans,
   getWorkoutSessions,
+  sendWeeklyFitnessCheckIn,
   suggestWorkoutPlan
 } from "../services/api";
 import { createWorkoutSocket } from "../services/socket";
@@ -28,6 +30,53 @@ function noteValue(notes, label, fallback = "Not set") {
 function listText(value, fallback = "None") {
   return value && value !== "none" ? value : fallback;
 }
+
+function reviewTone(reviewDecision) {
+  if (reviewDecision === "needs_review") return "review";
+  if (reviewDecision === "minor_adjustments") return "adjust";
+  if (reviewDecision === "collect_more_data") return "data";
+  return "steady";
+}
+
+function formatReviewLabel(value) {
+  return String(value || "preview")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+const PUBLIC_SIGNAL_LABELS = {
+  pain_signal: "Pain",
+  fatigue_signal: "Fatigue",
+  equipment_unavailable: "Equipment",
+  time_constraint: "Time",
+  too_hard: "Too hard",
+  too_easy: "Too easy",
+  felt_good: "Felt good",
+  focus_preference: "Focus request",
+  motivation: "Motivation",
+  recurring_check_in_pain: "Recurring pain",
+  repeated_time_constraint: "Time pattern",
+  repeated_fatigue_signal: "Fatigue pattern",
+  repeated_equipment_constraint: "Equipment pattern"
+};
+
+function publicSignalLabel(signal) {
+  return PUBLIC_SIGNAL_LABELS[signal] || formatReviewLabel(signal);
+}
+
+function uniqueValues(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+const WEEKLY_CHECK_IN_TAGS = [
+  { label: "Too hard", value: "too_hard" },
+  { label: "Too easy", value: "too_easy" },
+  { label: "Pain", value: "pain_signal" },
+  { label: "Fatigue", value: "fatigue_signal" },
+  { label: "No equipment", value: "no_equipment" },
+  { label: "Felt good", value: "felt_good" },
+  { label: "Want more focus", value: "want_more_focus" }
+];
 
 function getPlanExercises(plan) {
   if (Array.isArray(plan?.assignments) && plan.assignments.length > 0) {
@@ -194,6 +243,16 @@ function Training() {
   const [planActionStatus, setPlanActionStatus] = useState("idle");
   const [restoreError, setRestoreError] = useState("");
   const [historyError, setHistoryError] = useState("");
+  const [weeklyReview, setWeeklyReview] = useState(null);
+  const [weeklyReviewStatus, setWeeklyReviewStatus] = useState("idle");
+  const [weeklyReviewError, setWeeklyReviewError] = useState("");
+  const [weeklyCheckInAnswers, setWeeklyCheckInAnswers] = useState({});
+  const [weeklyCheckInGeneralNote, setWeeklyCheckInGeneralNote] = useState("");
+  const [weeklyCheckInSelectedTags, setWeeklyCheckInSelectedTags] = useState([]);
+  const [weeklyCheckInSignals, setWeeklyCheckInSignals] = useState([]);
+  const [weeklyCheckInStatus, setWeeklyCheckInStatus] = useState("idle");
+  const [weeklyCheckInMessage, setWeeklyCheckInMessage] = useState("");
+  const [weeklyCheckInError, setWeeklyCheckInError] = useState("");
   const [pendingAction, setPendingAction] = useState("");
   const [setForm, setSetForm] = useState({
     exerciseId: "",
@@ -205,21 +264,46 @@ function Training() {
   const activePanelRef = useRef(null);
   const sessionDayExercisesRef = useRef([]);
   const storedUser = getStoredUser();
+  const weeklyCoachQuestions = useMemo(
+    () => (Array.isArray(weeklyReview?.coachQuestions) ? weeklyReview.coachQuestions.slice(0, 3) : []),
+    [weeklyReview]
+  );
+  const weeklyReviewActions = useMemo(
+    () => (Array.isArray(weeklyReview?.reviewActions) ? weeklyReview.reviewActions.slice(0, 3) : []),
+    [weeklyReview]
+  );
+  const weeklyReviewSignals = useMemo(() => {
+    const knownReasonCodes = (Array.isArray(weeklyReview?.reasonCodes) ? weeklyReview.reasonCodes : [])
+      .filter((code) => PUBLIC_SIGNAL_LABELS[code]);
+    return uniqueValues([...weeklyCheckInSignals, ...knownReasonCodes]).slice(0, 5);
+  }, [weeklyCheckInSignals, weeklyReview]);
+  const hasWeeklyCheckInAnswer = weeklyCoachQuestions.some((question) =>
+    String(weeklyCheckInAnswers[question] || "").trim()
+  );
+  const hasWeeklyCheckInInput =
+    hasWeeklyCheckInAnswer ||
+    String(weeklyCheckInGeneralNote || "").trim() ||
+    weeklyCheckInSelectedTags.length > 0;
 
   useEffect(() => {
     async function loadTraining() {
       setStatus("loading");
       setError("");
+      setWeeklyReviewStatus("loading");
+      setWeeklyReviewError("");
 
       try {
-        const [plansResult, restoreResult, historyResult] = await Promise.allSettled([
+        const [plansResult, restoreResult, historyResult, reviewResult] = await Promise.allSettled([
           getWorkoutPlans(),
           storedUser?.userId
             ? getActiveWorkoutSession(storedUser.userId)
             : Promise.resolve(null),
           storedUser?.userId
             ? getWorkoutSessions(storedUser.userId)
-            : Promise.resolve([])
+            : Promise.resolve([]),
+          storedUser?.userId
+            ? getWeeklyFitnessReview(storedUser.userId)
+            : Promise.resolve(null)
         ]);
         if (plansResult.status === "rejected") {
           throw plansResult.reason;
@@ -232,6 +316,9 @@ function Training() {
         setFinishedWorkouts(workoutHistory);
         setRestoreError(restoreResult.status === "rejected" ? restoreResult.reason.message : "");
         setHistoryError(historyResult.status === "rejected" ? historyResult.reason.message : "");
+        setWeeklyReview(reviewResult.status === "fulfilled" ? reviewResult.value : null);
+        setWeeklyReviewError(reviewResult.status === "rejected" ? reviewResult.reason.message : "");
+        setWeeklyReviewStatus(reviewResult.status === "rejected" ? "error" : "success");
 
         if (restoredWorkout) {
           const restoredPlan = workoutPlans.find(
@@ -285,6 +372,91 @@ function Training() {
 
     loadTraining();
   }, []);
+
+  async function refreshWeeklyReview() {
+    if (!storedUser?.userId) {
+      return;
+    }
+
+    setWeeklyReviewStatus("loading");
+    setWeeklyReviewError("");
+    setWeeklyCheckInMessage("");
+    setWeeklyCheckInError("");
+    setWeeklyCheckInSignals([]);
+
+    try {
+      const review = await getWeeklyFitnessReview(storedUser.userId);
+      setWeeklyReview(review);
+      setWeeklyReviewStatus("success");
+    } catch (requestError) {
+      setWeeklyReviewError(requestError.message);
+      setWeeklyReviewStatus("error");
+    }
+  }
+
+  function updateWeeklyCheckInAnswer(question, answer) {
+    setWeeklyCheckInAnswers((current) => ({
+      ...current,
+      [question]: answer
+    }));
+    setWeeklyCheckInMessage("");
+    setWeeklyCheckInError("");
+  }
+
+  function updateWeeklyCheckInGeneralNote(note) {
+    setWeeklyCheckInGeneralNote(note);
+    setWeeklyCheckInMessage("");
+    setWeeklyCheckInError("");
+  }
+
+  function toggleWeeklyCheckInTag(tag) {
+    setWeeklyCheckInSelectedTags((current) =>
+      current.includes(tag)
+        ? current.filter((item) => item !== tag)
+        : [...current, tag]
+    );
+    setWeeklyCheckInMessage("");
+    setWeeklyCheckInError("");
+  }
+
+  async function submitWeeklyCheckIn() {
+    if (!storedUser?.userId) {
+      return;
+    }
+
+    const answers = weeklyCoachQuestions
+      .map((question) => ({
+        question,
+        answer: String(weeklyCheckInAnswers[question] || "").trim()
+      }))
+      .filter((item) => item.answer);
+    const generalNote = String(weeklyCheckInGeneralNote || "").trim();
+
+    if (answers.length === 0 && !generalNote && weeklyCheckInSelectedTags.length === 0) {
+      return;
+    }
+
+    setWeeklyCheckInStatus("loading");
+    setWeeklyCheckInMessage("");
+    setWeeklyCheckInError("");
+
+    try {
+      const result = await sendWeeklyFitnessCheckIn(storedUser.userId, {
+        answers,
+        generalNote,
+        selectedTags: weeklyCheckInSelectedTags
+      });
+      if (result?.preview) {
+        setWeeklyReview(result.preview);
+      }
+      setWeeklyCheckInSignals(Array.isArray(result?.parsedSignals) ? result.parsedSignals : []);
+      setWeeklyCheckInStatus("success");
+      setWeeklyCheckInMessage(result?.message || "Coach will use this for next week.");
+    } catch (requestError) {
+      setWeeklyCheckInStatus("error");
+      setWeeklyCheckInError(requestError.message);
+    }
+  }
 
   useEffect(() => {
     const socket = createWorkoutSocket("trainee");
@@ -349,9 +521,14 @@ function Training() {
 
     socket.on("workout:issueReported", (issue) => {
       setPendingAction("");
-      setLiveMessage(
-        issue.error ? issue.message : "Issue reported to coach dashboard in real time."
-      );
+      if (!issue.error) {
+        setLiveMessage("Issue reported to coach dashboard in real time.");
+      }
+    });
+
+    socket.on("workout:error", (errorPayload) => {
+      setPendingAction("");
+      setLiveMessage(errorPayload?.message || "Workout update could not be completed.");
     });
 
     socket.on("workout:coachResponse", (response) => {
@@ -811,6 +988,203 @@ function Training() {
         </main>
 
         <aside className="training-side-column">
+          <section
+            className={`weekly-coach-review weekly-coach-review--${reviewTone(weeklyReview?.reviewDecision)}`}
+            aria-labelledby="weekly-coach-review-heading"
+          >
+            <div className="weekly-coach-review__header">
+              <div>
+                <p className="eyebrow">Weekly coach review</p>
+                <h2 id="weekly-coach-review-heading">
+                  {weeklyReviewStatus === "error"
+                    ? "Coach review unavailable"
+                    : weeklyReview?.headline || "Your coach brief is loading"}
+                </h2>
+              </div>
+              <span className="weekly-coach-review__status">
+                {weeklyReviewStatus === "loading"
+                  ? "Syncing"
+                  : weeklyReviewStatus === "error"
+                    ? "Retry"
+                  : weeklyReview?.confidence
+                    ? `${weeklyReview.confidence} confidence`
+                    : "Preview"}
+              </span>
+            </div>
+
+            {weeklyReviewStatus === "error" ? (
+              <div className="weekly-coach-review__empty" role="status">
+                <strong>Coach review unavailable</strong>
+                <p>{weeklyReviewError || "Try again after your training data syncs."}</p>
+              </div>
+            ) : weeklyReview ? (
+              <>
+                <div className="weekly-coach-review__summary">
+                  <div className="weekly-coach-review__metric">
+                    <span>Review state</span>
+                    <strong>{formatReviewLabel(weeklyReview.reviewDecision || "keep_plan")}</strong>
+                  </div>
+                  <div className="weekly-coach-review__metric">
+                    <span>Plan changes</span>
+                    <strong>Preview only</strong>
+                  </div>
+                </div>
+
+                <div className="weekly-coach-review__decision">
+                  <span>Next week focus</span>
+                  <strong>{weeklyReview.recommendedNextStep}</strong>
+                  {weeklyReviewActions.length === 0 && weeklyReview.coachNote ? (
+                    <p className="weekly-coach-review__note">{weeklyReview.coachNote}</p>
+                  ) : null}
+                </div>
+
+                <div className="weekly-coach-review__signals">
+                  <span>Signals from your check-in</span>
+                  {weeklyReviewSignals.length > 0 ? (
+                    <div className="weekly-coach-review__signal-list" aria-label="Training signals">
+                      {weeklyReviewSignals.map((signal) => (
+                        <span className="weekly-coach-review__signal" key={signal}>
+                          {publicSignalLabel(signal)}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="weekly-coach-review__muted">
+                      Add a note or chip so the coach can read load, pain, fatigue, equipment, or focus.
+                    </p>
+                  )}
+                </div>
+
+                {weeklyReviewActions.length > 0 ? (
+                  <div className="weekly-coach-review__actions">
+                    <span>Coach suggestions</span>
+                    {weeklyReviewActions.map((action) => (
+                      <article
+                        className="weekly-coach-review__action"
+                        key={`${action.type}-${action.label}-${action.reason}`}
+                      >
+                        <strong>{action.label}</strong>
+                        <p>{action.reason}</p>
+                        <small>{String(action.status || "preview_only").replace(/_/g, " ")}</small>
+                      </article>
+                    ))}
+                    {weeklyReview.coachNote ? (
+                      <p className="weekly-coach-review__note">{weeklyReview.coachNote}</p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {Array.isArray(weeklyReview.keyFindings) && weeklyReview.keyFindings.length > 0 ? (
+                  <div className="weekly-coach-review__block">
+                    <span>What coach noticed</span>
+                    <ul>
+                      {weeklyReview.keyFindings.slice(0, 4).map((finding) => (
+                        <li key={finding}>{finding}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                {Array.isArray(weeklyReview.safetyNotes) && weeklyReview.safetyNotes.length > 0 ? (
+                  <div className="weekly-coach-review__safety">
+                    <span>Safety</span>
+                    <ul>
+                      {weeklyReview.safetyNotes.slice(0, 3).map((note) => (
+                        <li key={note}>{note}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                {weeklyReview ? (
+                  <div className="weekly-coach-review__questions">
+                    <span>Coach check-in for next week</span>
+                    {weeklyCoachQuestions.length > 0 ? (
+                      weeklyCoachQuestions.map((question, index) => (
+                        <label className="weekly-coach-review__check-in" key={question}>
+                          <p>{question}</p>
+                          <textarea
+                            aria-label={`Answer coach question ${index + 1}`}
+                            maxLength={300}
+                            rows={2}
+                            value={weeklyCheckInAnswers[question] || ""}
+                            onChange={(event) => updateWeeklyCheckInAnswer(question, event.target.value)}
+                            placeholder="Short answer"
+                          />
+                        </label>
+                      ))
+                    ) : null}
+                    <label className="weekly-coach-review__check-in">
+                      <p>Anything the coach should know before next week?</p>
+                      <textarea
+                        aria-label="General coach note"
+                        maxLength={500}
+                        rows={3}
+                        value={weeklyCheckInGeneralNote}
+                        onChange={(event) => updateWeeklyCheckInGeneralNote(event.target.value)}
+                        placeholder="Load, pain, fatigue, equipment, or what felt different"
+                      />
+                    </label>
+                    <div className="weekly-coach-review__chips" aria-label="Quick check-in tags">
+                      {WEEKLY_CHECK_IN_TAGS.map((tag) => {
+                        const selected = weeklyCheckInSelectedTags.includes(tag.value);
+
+                        return (
+                          <button
+                            key={tag.value}
+                            type="button"
+                            className={selected ? "weekly-coach-review__chip weekly-coach-review__chip--selected" : "weekly-coach-review__chip"}
+                            aria-pressed={selected}
+                            onClick={() => toggleWeeklyCheckInTag(tag.value)}
+                          >
+                            {tag.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button
+                      type="button"
+                      className="button button--primary weekly-coach-review__check-in-submit"
+                      onClick={submitWeeklyCheckIn}
+                      disabled={
+                        weeklyCheckInStatus === "loading" ||
+                        weeklyReviewStatus === "loading" ||
+                        !storedUser?.userId ||
+                        !hasWeeklyCheckInInput
+                      }
+                    >
+                      {weeklyCheckInStatus === "loading" ? "Sending..." : "Send check-in"}
+                    </button>
+                    {weeklyCheckInMessage ? (
+                      <p className="weekly-coach-review__check-in-message" role="status">
+                        {weeklyCheckInMessage}
+                      </p>
+                    ) : null}
+                    {weeklyCheckInError ? (
+                      <p className="weekly-coach-review__check-in-error" role="alert">
+                        {weeklyCheckInError}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <div className="weekly-coach-review__empty" role="status">
+                <strong>Building your weekly read</strong>
+                <p>We are checking your recent sessions, sets, and reported issues.</p>
+              </div>
+            )}
+
+            <button
+              type="button"
+              className="button button--ghost weekly-coach-review__refresh"
+              onClick={refreshWeeklyReview}
+              disabled={weeklyReviewStatus === "loading" || !storedUser?.userId}
+            >
+              {weeklyReviewStatus === "loading" ? "Refreshing..." : "Refresh review"}
+            </button>
+          </section>
+
           <section ref={activePanelRef} className="active-workout-sidebar" aria-labelledby="active-workout-heading">
             <div className="section-heading">
               <h2 id="active-workout-heading">Active Workout</h2>
@@ -824,7 +1198,7 @@ function Training() {
             </div>
 
             {isPreviewingDifferentDay ? (
-              <div className="active-workout-day-notice" role="status">
+              <div className="active-workout-day-notice" role="status" aria-live="polite">
                 <strong>{activeDayLabel} is currently active.</strong>
                 <span>
                   {selectedDayLabel} is selected in the weekly plan for preview only.
@@ -939,7 +1313,14 @@ function Training() {
                     </span>
                     <strong>{progressPercent}%</strong>
                   </div>
-                  <div className="session-progress-bar" aria-hidden="true">
+                  <div
+                    className="session-progress-bar"
+                    role="progressbar"
+                    aria-label="Workout set progress"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    aria-valuenow={progressPercent}
+                  >
                     <span style={{ width: `${progressPercent}%` }} />
                   </div>
                 </div>
@@ -960,6 +1341,16 @@ function Training() {
                     </select>
                   </label>
                   <div className="compact-form-grid">
+                    <label>
+                      Set
+                      <input
+                        name="setNumber"
+                        type="number"
+                        min="1"
+                        value={setForm.setNumber}
+                        onChange={handleSetFormChange}
+                      />
+                    </label>
                     <label>
                       Weight
                       <input
@@ -1055,7 +1446,14 @@ function Training() {
             <div className="keep-going-card">
               <strong>Keep it up</strong>
               <p>You are set up to follow the plan and send real-time progress to your coach.</p>
-              <div className="session-progress-bar" aria-hidden="true">
+              <div
+                className="session-progress-bar"
+                role="progressbar"
+                aria-label="Weekly workout progress"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow={progressPercent}
+              >
                 <span style={{ width: `${progressPercent}%` }} />
               </div>
             </div>
@@ -1064,7 +1462,7 @@ function Training() {
       </div>
 
       {restoreError ? (
-        <div className="message message--error">
+        <div className="message message--error" role="alert">
           Active workout restore is temporarily unavailable. Your plan is still available. {restoreError}
           <button className="button button--ghost" type="button" onClick={() => window.location.reload()}>
             Retry restore
@@ -1072,7 +1470,7 @@ function Training() {
         </div>
       ) : null}
       {historyError ? (
-        <div className="message message--error">
+        <div className="message message--error" role="alert">
           Workout history could not be loaded, but training remains available.
         </div>
       ) : null}
@@ -1081,13 +1479,22 @@ function Training() {
           <strong>Coach Response</strong>
           {coachResponses.map((response) => (
             <article key={`${response.workoutSessionId}-${response.sentAt}`}>
+              {response.senderRole === "ai_coach" ? (
+                <small className="coach-response-from">
+                  {response.specialistName ? `${response.specialistName} (AI)` : "AI Coach"}
+                </small>
+              ) : null}
               <p>{response.message}</p>
               <time>{new Date(response.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
             </article>
           ))}
         </section>
       ) : null}
-      {liveMessage ? <div className="message message--success">{liveMessage}</div> : null}
+      {liveMessage ? (
+        <div className="message message--success" role="status" aria-live="polite">
+          {liveMessage}
+        </div>
+      ) : null}
     </div>
   );
 }

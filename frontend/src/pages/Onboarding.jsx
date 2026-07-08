@@ -42,6 +42,78 @@ function toList(value) {
     .filter(Boolean);
 }
 
+const textFieldMessage =
+  "Use fitness-related text only; remove links, emails, websites, or unrelated requests.";
+
+const textFields = [
+  "equipmentAccess",
+  "injuries",
+  "limitations",
+  "likedExercises",
+  "dislikedExercises",
+  "specialtyFocus",
+  "specialtyNotes",
+  "freeTextNotes"
+];
+
+function hasJunkText(value) {
+  const text = String(value || "").trim();
+
+  if (!text) {
+    return false;
+  }
+
+  return [
+    /https?:\/\//i,
+    /\bwww\./i,
+    /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i,
+    /\bstack\s*overflow\b/i,
+    /\bstackoverflow\b/i,
+    /\bgithub\b/i,
+    /\bchatgpt\b/i,
+    /\bplease\s+(go|visit|open|search|look up|google|browse|click)\b/i,
+    /```|<script|select\s+\*|drop\s+table|console\.log/i
+  ].some((pattern) => pattern.test(text));
+}
+
+function validateNumberField(value, min, max, label, wholeNumber = false) {
+  if (String(value || "").trim() === "") {
+    return `${label} is required.`;
+  }
+
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
+    return `${label} must be between ${min} and ${max}.`;
+  }
+
+  if (wholeNumber && !Number.isInteger(parsed)) {
+    return `${label} must be a whole number.`;
+  }
+
+  return "";
+}
+
+function validateOnboardingForm(form) {
+  const errors = {};
+
+  const ageError = validateNumberField(form.age, 10, 100, "Age", true);
+  const weightError = validateNumberField(form.weight, 30, 350, "Weight");
+  const heightError = validateNumberField(form.height, 100, 250, "Height");
+
+  if (ageError) errors.age = ageError;
+  if (weightError) errors.weight = weightError;
+  if (heightError) errors.height = heightError;
+
+  textFields.forEach((field) => {
+    if (hasJunkText(form[field])) {
+      errors[field] = textFieldMessage;
+    }
+  });
+
+  return errors;
+}
+
 function specialtyPrompt(specialty) {
   switch (specialty) {
     case "strength training":
@@ -80,6 +152,7 @@ function Onboarding() {
   const [hasProfile, setHasProfile] = useState(false);
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
 
   useEffect(() => {
     async function loadOnboarding() {
@@ -156,6 +229,7 @@ function Onboarding() {
   function handleChange(event) {
     const { name, value } = event.target;
     setForm((current) => ({ ...current, [name]: value }));
+    setFieldErrors((current) => ({ ...current, [name]: "" }));
     setError("");
   }
 
@@ -195,6 +269,15 @@ function Onboarding() {
 
   async function handleSubmit(event) {
     event.preventDefault();
+    const validationErrors = validateOnboardingForm(form);
+    setFieldErrors(validationErrors);
+
+    if (Object.keys(validationErrors).length > 0) {
+      setError("Please fix the highlighted profile fields before saving.");
+      setStatus("ready");
+      return;
+    }
+
     setStatus("saving");
     setError("");
 
@@ -259,7 +342,7 @@ function Onboarding() {
 
       {error ? <ErrorState message={error} /> : null}
 
-      <form className="onboarding-form" onSubmit={handleSubmit}>
+      <form className="onboarding-form" onSubmit={handleSubmit} noValidate>
         <section className="settings-page onboarding-step">
           <div className="section-heading">
             <p className="eyebrow">Training basics</p>
@@ -321,15 +404,47 @@ function Onboarding() {
           <div className="compact-form-grid">
             <label>
               Age
-              <input name="age" type="number" min="10" value={form.age} onChange={handleChange} />
+              <input
+                name="age"
+                type="number"
+                min="10"
+                max="100"
+                required
+                value={form.age}
+                onChange={handleChange}
+                aria-invalid={Boolean(fieldErrors.age)}
+              />
+              {fieldErrors.age ? <span className="field-error">{fieldErrors.age}</span> : null}
             </label>
             <label>
               Weight (kg)
-              <input name="weight" type="number" min="30" max="350" step="0.1" value={form.weight} onChange={handleChange} />
+              <input
+                name="weight"
+                type="number"
+                min="30"
+                max="350"
+                step="0.1"
+                required
+                value={form.weight}
+                onChange={handleChange}
+                aria-invalid={Boolean(fieldErrors.weight)}
+              />
+              {fieldErrors.weight ? <span className="field-error">{fieldErrors.weight}</span> : null}
             </label>
             <label>
               Height (cm)
-              <input name="height" type="number" min="100" max="250" step="0.1" value={form.height} onChange={handleChange} />
+              <input
+                name="height"
+                type="number"
+                min="100"
+                max="250"
+                step="0.1"
+                required
+                value={form.height}
+                onChange={handleChange}
+                aria-invalid={Boolean(fieldErrors.height)}
+              />
+              {fieldErrors.height ? <span className="field-error">{fieldErrors.height}</span> : null}
             </label>
           </div>
 
@@ -339,8 +454,12 @@ function Onboarding() {
               name="equipmentAccess"
               value={form.equipmentAccess}
               onChange={handleChange}
+              aria-invalid={Boolean(fieldErrors.equipmentAccess)}
               placeholder="barbell, dumbbells, cables, treadmill"
             />
+            {fieldErrors.equipmentAccess ? (
+              <span className="field-error">{fieldErrors.equipmentAccess}</span>
+            ) : null}
           </label>
 
           <label>
@@ -349,8 +468,10 @@ function Onboarding() {
               name="injuries"
               value={form.injuries}
               onChange={handleChange}
+              aria-invalid={Boolean(fieldErrors.injuries)}
               placeholder="shoulder pain, knee history"
             />
+            {fieldErrors.injuries ? <span className="field-error">{fieldErrors.injuries}</span> : null}
           </label>
 
           <label>
@@ -359,8 +480,12 @@ function Onboarding() {
               name="limitations"
               value={form.limitations}
               onChange={handleChange}
+              aria-invalid={Boolean(fieldErrors.limitations)}
               placeholder="low impact only, limited time"
             />
+            {fieldErrors.limitations ? (
+              <span className="field-error">{fieldErrors.limitations}</span>
+            ) : null}
           </label>
         </section>
 
@@ -426,8 +551,12 @@ function Onboarding() {
               name="likedExercises"
               value={form.likedExercises}
               onChange={handleChange}
+              aria-invalid={Boolean(fieldErrors.likedExercises)}
               placeholder="squats, rowing, incline press"
             />
+            {fieldErrors.likedExercises ? (
+              <span className="field-error">{fieldErrors.likedExercises}</span>
+            ) : null}
           </label>
 
           <label>
@@ -436,8 +565,12 @@ function Onboarding() {
               name="dislikedExercises"
               value={form.dislikedExercises}
               onChange={handleChange}
+              aria-invalid={Boolean(fieldErrors.dislikedExercises)}
               placeholder="burpees, running, overhead press"
             />
+            {fieldErrors.dislikedExercises ? (
+              <span className="field-error">{fieldErrors.dislikedExercises}</span>
+            ) : null}
           </label>
 
           <label>
@@ -446,8 +579,12 @@ function Onboarding() {
               name="specialtyFocus"
               value={form.specialtyFocus}
               onChange={handleChange}
+              aria-invalid={Boolean(fieldErrors.specialtyFocus)}
               placeholder="upper body strength, speed, fat loss consistency"
             />
+            {fieldErrors.specialtyFocus ? (
+              <span className="field-error">{fieldErrors.specialtyFocus}</span>
+            ) : null}
           </label>
 
           <label>
@@ -456,8 +593,12 @@ function Onboarding() {
               name="specialtyNotes"
               value={form.specialtyNotes}
               onChange={handleChange}
+              aria-invalid={Boolean(fieldErrors.specialtyNotes)}
               placeholder="Anything the workout generator should consider"
             />
+            {fieldErrors.specialtyNotes ? (
+              <span className="field-error">{fieldErrors.specialtyNotes}</span>
+            ) : null}
           </label>
 
           <label>
@@ -466,8 +607,12 @@ function Onboarding() {
               name="freeTextNotes"
               value={form.freeTextNotes}
               onChange={handleChange}
+              aria-invalid={Boolean(fieldErrors.freeTextNotes)}
               placeholder="Schedule, preferences, recovery, motivation"
             />
+            {fieldErrors.freeTextNotes ? (
+              <span className="field-error">{fieldErrors.freeTextNotes}</span>
+            ) : null}
           </label>
 
           <button type="submit" className="button button--primary" disabled={status === "saving"}>
